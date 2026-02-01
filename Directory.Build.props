@@ -1,0 +1,4 @@
+<Project>
+  <!-- Import parent Directory.Build.props to inherit UnityEnginePath -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" Condition="Exists('$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))')"/>
+</Project>
