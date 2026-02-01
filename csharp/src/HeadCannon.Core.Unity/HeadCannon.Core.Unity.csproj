@@ -1,0 +1,73 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net35;net472;net48</TargetFrameworks>
+    <AssemblyName>HeadCannon.Core.Unity</AssemblyName>
+    <RootNamespace>HeadCannon.Core.Unity</RootNamespace>
+    <Version>1.0.0</Version>
+    <LangVersion>7.3</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <OutputType>Library</OutputType>
+    <Authors>HeadCannon Mods</Authors>
+    <Description>Unity-specific extensions for HeadCannon head tracking mods</Description>
+  </PropertyGroup>
+
+  <!-- Legacy net35 for older Unity games like Obra Dinn -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net35'">
+    <DefineConstants>$(DefineConstants);NET35</DefineConstants>
+    <!-- Suppress warning about Unity DLL version mismatch - expected when cross-compiling -->
+    <MSBuildWarningsAsMessages>MSB3258</MSBuildWarningsAsMessages>
+  </PropertyGroup>
+
+  <!-- Exclude UnityEngine.UI-dependent files from net35 (not available in older Unity) -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net35'">
+    <Compile Remove="Utilities\CrosshairUtility.cs" />
+  </ItemGroup>
+
+  <!-- Reference HeadCannon.Core -->
+  <ItemGroup>
+    <ProjectReference Include="..\HeadCannon.Core\HeadCannon.Core.csproj" />
+  </ItemGroup>
+
+  <!-- Unity stub references - consuming projects should provide actual DLLs -->
+  <ItemGroup>
+    <Reference Include="UnityEngine">
+      <HintPath>$(UnityEnginePath)\UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(UnityEnginePath)\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>$(UnityEnginePath)\UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UIModule">
+      <HintPath>$(UnityEnginePath)\UnityEngine.UIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.PhysicsModule">
+      <HintPath>$(UnityEnginePath)\UnityEngine.PhysicsModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.TextRenderingModule">
+      <HintPath>$(UnityEnginePath)\UnityEngine.TextRenderingModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- UnityEngine.UI only for modern frameworks (not available/used in net35) -->
+  <ItemGroup Condition="'$(TargetFramework)' != 'net35'">
+    <Reference Include="UnityEngine.UI">
+      <HintPath>$(UnityEnginePath)\UnityEngine.UI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <!-- Default Unity path if not specified -->
+  <PropertyGroup Condition="'$(UnityEnginePath)' == ''">
+    <UnityEnginePath>$(MSBuildThisFileDirectory)..\..\..\..\gone-home\src\GoneHomeHeadTracking\libs</UnityEnginePath>
+  </PropertyGroup>
+</Project>
