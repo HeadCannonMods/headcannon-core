@@ -3,7 +3,7 @@
     <TargetFrameworks>net35;net472;net48</TargetFrameworks>
     <AssemblyName>HeadCannon.Core.Unity</AssemblyName>
     <RootNamespace>HeadCannon.Core.Unity</RootNamespace>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <LangVersion>7.3</LangVersion>
     <Nullable>disable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
@@ -66,8 +66,8 @@
     </Reference>
   </ItemGroup>
 
-  <!-- Default Unity path if not specified -->
-  <PropertyGroup Condition="'$(UnityEnginePath)' == ''">
-    <UnityEnginePath>$(MSBuildThisFileDirectory)..\..\..\..\gone-home\src\GoneHomeHeadTracking\libs</UnityEnginePath>
-  </PropertyGroup>
+  <!-- Require UnityEnginePath to be set by consuming project -->
+  <Target Name="ValidateUnityEnginePath" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="'$(UnityEnginePath)' == ''" Text="UnityEnginePath property must be set. Pass it via -p:UnityEnginePath=path/to/unity/dlls" />
+  </Target>
 </Project>
