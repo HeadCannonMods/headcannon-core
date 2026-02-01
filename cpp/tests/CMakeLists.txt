@@ -1,0 +1,12 @@
+cmake_minimum_required(VERSION 3.20)
+
+# Simple test executable
+add_executable(cameraunlock_tests
+    test_main.cpp
+    math_tests.cpp
+    protocol_tests.cpp
+)
+
+target_link_libraries(cameraunlock_tests PRIVATE cameraunlock)
+
+add_test(NAME cameraunlock_tests COMMAND cameraunlock_tests)

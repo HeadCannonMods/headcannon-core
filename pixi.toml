@@ -1,0 +1,32 @@
+[workspace]
+name = "cameraunlock-core"
+version = "1.0.0"
+description = "Cross-platform head tracking library for Unity game mods"
+channels = ["conda-forge"]
+platforms = ["win-64", "linux-64", "osx-64"]
+
+[tasks]
+# Testing
+test = "dotnet test csharp --verbosity normal"
+test-quick = "dotnet test csharp --verbosity quiet"
+test-coverage = "dotnet test csharp --collect:\"XPlat Code Coverage\""
+
+# Building
+build = "dotnet build csharp -c Release"
+build-debug = "dotnet build csharp -c Debug"
+clean = "dotnet clean csharp"
+restore = "dotnet restore csharp"
+
+# Full rebuild
+rebuild = { depends-on = ["clean", "build"] }
+
+# Packaging
+pack = "dotnet pack csharp -c Release -o dist"
+
+# Development workflow
+check = { depends-on = ["build-debug", "test-quick"] }
+
+# Documentation
+# doc = "docfx docfx.json"
+
+[dependencies]

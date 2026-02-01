@@ -1,0 +1,97 @@
+#include "cameraunlock/protocol/udp_socket.h"
+#include <cstring>
+
+#ifdef _WIN32
+#pragma comment(lib, "ws2_32.lib")
+#endif
+
+namespace cameraunlock {
+
+UdpSocket::~UdpSocket() {
+    Close();
+}
+
+bool UdpSocket::Open(uint16_t port) {
+    if (m_socket != INVALID_SOCKET) {
+        return true;
+    }
+
+#ifdef _WIN32
+    WSADATA wsaData;
+    int result = WSAStartup(MAKEWORD(2, 2), &wsaData);
+    if (result != 0) {
+        return false;
+    }
+    m_wsaInitialized = true;
+#endif
+
+    // Create UDP socket
+    m_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (m_socket == INVALID_SOCKET) {
+#ifdef _WIN32
+        WSACleanup();
+        m_wsaInitialized = false;
+#endif
+        return false;
+    }
+
+    // Set non-blocking
+#ifdef _WIN32
+    u_long mode = 1;
+    if (ioctlsocket(m_socket, FIONBIO, &mode) != 0) {
+        closesocket(m_socket);
+        m_socket = INVALID_SOCKET;
+        WSACleanup();
+        m_wsaInitialized = false;
+        return false;
+    }
+#else
+    int flags = fcntl(m_socket, F_GETFL, 0);
+    if (flags == -1 || fcntl(m_socket, F_SETFL, flags | O_NONBLOCK) == -1) {
+        close(m_socket);
+        m_socket = INVALID_SOCKET;
+        return false;
+    }
+#endif
+
+    // Bind to all interfaces
+    sockaddr_in addr;
+    std::memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    addr.sin_addr.s_addr = INADDR_ANY;
+
+    if (bind(m_socket, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) == SOCKET_ERROR) {
+#ifdef _WIN32
+        closesocket(m_socket);
+        WSACleanup();
+        m_wsaInitialized = false;
+#else
+        close(m_socket);
+#endif
+        m_socket = INVALID_SOCKET;
+        return false;
+    }
+
+    return true;
+}
+
+void UdpSocket::Close() {
+    if (m_socket != INVALID_SOCKET) {
+#ifdef _WIN32
+        closesocket(m_socket);
+#else
+        close(m_socket);
+#endif
+        m_socket = INVALID_SOCKET;
+    }
+
+#ifdef _WIN32
+    if (m_wsaInitialized) {
+        WSACleanup();
+        m_wsaInitialized = false;
+    }
+#endif
+}
+
+}  // namespace cameraunlock

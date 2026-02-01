@@ -1,0 +1,47 @@
+# Build output
+bin/
+obj/
+out/
+build/
+x64/
+Debug/
+Release/
+*.dll
+*.asi
+*.exe
+*.pdb
+*.lib
+*.exp
+*.ilk
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# IDE
+.vs/
+.vscode/
+*.user
+*.suo
+*.vcxproj.user
+
+# Release packaging
+release/
+
+# NuGet
+packages/
+*.nupkg
+*.cache
+
+# Pixi
+.pixi/
+
+# AI tooling
+.claude/
+.millhouse/
+
+# OS
+.DS_Store
+Thumbs.db

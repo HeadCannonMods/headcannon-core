@@ -1,0 +1,220 @@
+using System;
+using UnityEngine;
+
+namespace CameraUnlock.Core.Unity.Utilities
+{
+    /// <summary>
+    /// Utility for finding UI elements like reticles/crosshairs in games.
+    /// Uses multiple search strategies with fallbacks.
+    /// </summary>
+    public static class GameUIFinder
+    {
+        /// <summary>
+        /// Common names for reticle/crosshair UI elements.
+        /// </summary>
+        public static readonly string[] CommonReticleNames = new string[]
+        {
+            "Reticle",
+            "reticle",
+            "CrossHair",
+            "Crosshair",
+            "crosshair",
+            "Cursor",
+            "cursor",
+            "AimIndicator",
+            "CenterDot",
+            "HUD_Reticle",
+            "UIReticle",
+            "InteractionCursor",
+            "LookCursor",
+            "Dot",
+            "dot"
+        };
+
+        /// <summary>
+        /// Keywords that typically indicate a reticle element.
+        /// </summary>
+        public static readonly string[] ReticleKeywords = new string[]
+        {
+            "reticle",
+            "crosshair",
+            "aimpoint",
+            "centerdot",
+            "cursor"
+        };
+
+        /// <summary>
+        /// Finds a GameObject by exact name from a list of names.
+        /// </summary>
+        /// <param name="names">Names to search for.</param>
+        /// <returns>The first matching GameObject, or null if not found.</returns>
+        public static GameObject FindByNames(params string[] names)
+        {
+            if (names == null) return null;
+
+            foreach (string name in names)
+            {
+                if (string.IsNullOrEmpty(name)) continue;
+                GameObject found = GameObject.Find(name);
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Finds a GameObject whose name contains any of the specified keywords.
+        /// </summary>
+        /// <param name="keywords">Keywords to search for (case-insensitive).</param>
+        /// <returns>The first matching GameObject, or null if not found.</returns>
+        public static GameObject FindByKeywords(params string[] keywords)
+        {
+            if (keywords == null || keywords.Length == 0) return null;
+
+            #pragma warning disable CS0618 // FindObjectsByType unavailable in older Unity versions
+            GameObject[] allObjects = UnityEngine.Object.FindObjectsOfType<GameObject>();
+            #pragma warning restore CS0618
+            foreach (GameObject obj in allObjects)
+            {
+                if (obj == null) continue;
+                string objName = obj.name.ToLowerInvariant();
+
+                foreach (string keyword in keywords)
+                {
+                    if (string.IsNullOrEmpty(keyword)) continue;
+                    if (objName.Contains(keyword.ToLowerInvariant()))
+                    {
+                        return obj;
+                    }
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Searches all Canvas children for UI elements matching the keywords.
+        /// Uses reflection to avoid hard dependency on UnityEngine.UI.
+        /// </summary>
+        /// <param name="keywords">Keywords to search for (case-insensitive).</param>
+        /// <returns>The first matching GameObject, or null if not found.</returns>
+        public static GameObject FindInCanvas(params string[] keywords)
+        {
+            if (keywords == null || keywords.Length == 0) return null;
+
+            Type canvasType = Type.GetType("UnityEngine.Canvas, UnityEngine") ??
+                              Type.GetType("UnityEngine.Canvas, UnityEngine.UIModule");
+
+            if (canvasType == null) return null;
+
+            #pragma warning disable CS0618 // FindObjectsByType unavailable in older Unity versions
+            UnityEngine.Object[] canvases = UnityEngine.Object.FindObjectsOfType(canvasType);
+            #pragma warning restore CS0618
+            foreach (UnityEngine.Object canvasObj in canvases)
+            {
+                Component canvas = canvasObj as Component;
+                if (canvas == null) continue;
+
+                Transform[] children = canvas.GetComponentsInChildren<Transform>(true);
+                foreach (Transform child in children)
+                {
+                    if (child == null) continue;
+                    string childName = child.name.ToLowerInvariant();
+
+                    foreach (string keyword in keywords)
+                    {
+                        if (string.IsNullOrEmpty(keyword)) continue;
+                        if (childName.Contains(keyword.ToLowerInvariant()))
+                        {
+                            return child.gameObject;
+                        }
+                    }
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Attempts to find a reticle/crosshair using multiple strategies.
+        /// </summary>
+        /// <param name="customNames">Optional custom names to search first.</param>
+        /// <returns>The found reticle GameObject, or null if not found.</returns>
+        public static GameObject FindReticle(string[] customNames = null)
+        {
+            // Try custom names first
+            if (customNames != null && customNames.Length > 0)
+            {
+                GameObject found = FindByNames(customNames);
+                if (found != null) return found;
+            }
+
+            // Try common reticle names
+            GameObject result = FindByNames(CommonReticleNames);
+            if (result != null) return result;
+
+            // Try keyword search in all GameObjects
+            result = FindByKeywords(ReticleKeywords);
+            if (result != null) return result;
+
+            // Try canvas search
+            result = FindInCanvas(ReticleKeywords);
+            return result;
+        }
+
+        /// <summary>
+        /// Gets the RectTransform of a UI element, if it has one.
+        /// Uses reflection to avoid hard dependency on RectTransform type issues.
+        /// </summary>
+        /// <param name="gameObject">The GameObject to check.</param>
+        /// <returns>The RectTransform component, or null if not found.</returns>
+        public static RectTransform GetRectTransform(GameObject gameObject)
+        {
+            if (gameObject == null) return null;
+            return gameObject.GetComponent<RectTransform>();
+        }
+
+        /// <summary>
+        /// Finds a UI element by navigating a hierarchy path.
+        /// </summary>
+        /// <param name="rootName">Name of the root object to find first.</param>
+        /// <param name="path">Child path separated by '/' (e.g., "Canvas/HUD/Reticle").</param>
+        /// <returns>The found GameObject, or null if not found.</returns>
+        public static GameObject FindByPath(string rootName, string path)
+        {
+            if (string.IsNullOrEmpty(rootName) && string.IsNullOrEmpty(path))
+                return null;
+
+            GameObject root = null;
+
+            if (!string.IsNullOrEmpty(rootName))
+            {
+                root = GameObject.Find(rootName);
+                if (root == null) return null;
+            }
+
+            if (string.IsNullOrEmpty(path))
+                return root;
+
+            if (root == null)
+            {
+                // Path only - try to find directly
+                return GameObject.Find(path);
+            }
+
+            // Navigate the path
+            Transform current = root.transform;
+            string[] parts = path.Split('/');
+
+            foreach (string part in parts)
+            {
+                if (string.IsNullOrEmpty(part)) continue;
+                Transform child = current.Find(part);
+                if (child == null) return null;
+                current = child;
+            }
+
+            return current.gameObject;
+        }
+    }
+}
