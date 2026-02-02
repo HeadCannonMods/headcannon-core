@@ -7,6 +7,27 @@ $ProgressPreference = "SilentlyContinue"
 
 $Script:StateFileName = ".headtracking-state.json"
 
+# Helper function to convert PSCustomObject to hashtable (PS 5.1 compatibility)
+# ConvertFrom-Json | ConvertTo-Hashtable requires PS 6+
+function ConvertTo-Hashtable {
+    param([Parameter(ValueFromPipeline)]$InputObject)
+    process {
+        if ($null -eq $InputObject) { return $null }
+        if ($InputObject -is [System.Collections.IEnumerable] -and $InputObject -isnot [string]) {
+            $collection = @(foreach ($item in $InputObject) { ConvertTo-Hashtable $item })
+            return ,$collection
+        }
+        if ($InputObject -is [psobject]) {
+            $hash = @{}
+            foreach ($prop in $InputObject.PSObject.Properties) {
+                $hash[$prop.Name] = ConvertTo-Hashtable $prop.Value
+            }
+            return $hash
+        }
+        return $InputObject
+    }
+}
+
 <#
 .SYNOPSIS
     Tests if BepInEx is installed at the specified game path.
@@ -272,7 +293,7 @@ Enabled = true
     # Merge with existing state if present
     if (Test-Path $stateFile) {
         try {
-            $existingState = Get-Content $stateFile -Raw | ConvertFrom-Json -AsHashtable
+            $existingState = Get-Content $stateFile -Raw | ConvertFrom-Json | ConvertTo-Hashtable
             foreach ($key in $existingState.Keys) {
                 if ($key -ne 'framework') {
                     $state[$key] = $existingState[$key]
@@ -377,7 +398,7 @@ function Install-MelonLoader {
     # Merge with existing state if present
     if (Test-Path $stateFile) {
         try {
-            $existingState = Get-Content $stateFile -Raw | ConvertFrom-Json -AsHashtable
+            $existingState = Get-Content $stateFile -Raw | ConvertFrom-Json | ConvertTo-Hashtable
             foreach ($key in $existingState.Keys) {
                 if ($key -ne 'framework') {
                     $state[$key] = $existingState[$key]
@@ -429,7 +450,7 @@ function Get-ModLoaderState {
     }
 
     try {
-        return Get-Content $stateFile -Raw | ConvertFrom-Json -AsHashtable
+        return Get-Content $stateFile -Raw | ConvertFrom-Json | ConvertTo-Hashtable
     } catch {
         Write-Warning "Failed to parse state file: $_"
         return $null
@@ -782,7 +803,7 @@ function Install-UE4SS {
 
     if (Test-Path $stateFile) {
         try {
-            $existingState = Get-Content $stateFile -Raw | ConvertFrom-Json -AsHashtable
+            $existingState = Get-Content $stateFile -Raw | ConvertFrom-Json | ConvertTo-Hashtable
             foreach ($key in $existingState.Keys) {
                 if ($key -ne 'framework') {
                     $state[$key] = $existingState[$key]
