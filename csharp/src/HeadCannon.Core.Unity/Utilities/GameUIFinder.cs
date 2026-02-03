@@ -73,7 +73,7 @@ namespace HeadCannon.Core.Unity.Utilities
         {
             if (keywords == null || keywords.Length == 0) return null;
 
-            GameObject[] allObjects = UnityEngine.Object.FindObjectsOfType<GameObject>();
+            GameObject[] allObjects = UnityEngine.Object.FindObjectsByType<GameObject>(FindObjectSortMode.None);
             foreach (GameObject obj in allObjects)
             {
                 if (obj == null) continue;
@@ -106,7 +106,7 @@ namespace HeadCannon.Core.Unity.Utilities
 
             if (canvasType == null) return null;
 
-            UnityEngine.Object[] canvases = UnityEngine.Object.FindObjectsOfType(canvasType);
+            UnityEngine.Object[] canvases = UnityEngine.Object.FindObjectsByType(canvasType, FindObjectSortMode.None);
             foreach (UnityEngine.Object canvasObj in canvases)
             {
                 Component canvas = canvasObj as Component;

@@ -22,7 +22,7 @@ namespace HeadCannon.Core.Unity.Utilities
             var candidates = new List<Image>();
             var images = searchInactive
                 ? Resources.FindObjectsOfTypeAll<Image>()
-                : UnityEngine.Object.FindObjectsOfType<Image>();
+                : UnityEngine.Object.FindObjectsByType<Image>(FindObjectSortMode.None);
 
             foreach (var image in images)
             {
@@ -51,7 +51,7 @@ namespace HeadCannon.Core.Unity.Utilities
             var candidates = new List<RawImage>();
             var images = searchInactive
                 ? Resources.FindObjectsOfTypeAll<RawImage>()
-                : UnityEngine.Object.FindObjectsOfType<RawImage>();
+                : UnityEngine.Object.FindObjectsByType<RawImage>(FindObjectSortMode.None);
 
             foreach (var image in images)
             {
