@@ -30,8 +30,8 @@
     <ProjectReference Include="..\HeadCannon.Core\HeadCannon.Core.csproj" />
   </ItemGroup>
 
-  <!-- Unity stub references - consuming projects should provide actual DLLs -->
-  <ItemGroup>
+  <!-- Unity references for normal builds (real Unity DLLs with modules) -->
+  <ItemGroup Condition="'$(UseUnityStubs)' != 'true'">
     <Reference Include="UnityEngine">
       <HintPath>$(UnityEnginePath)\UnityEngine.dll</HintPath>
       <Private>false</Private>
@@ -58,8 +58,16 @@
     </Reference>
   </ItemGroup>
 
+  <!-- Unity references for CI stub builds (all types in UnityEngine.dll only) -->
+  <ItemGroup Condition="'$(UseUnityStubs)' == 'true'">
+    <Reference Include="UnityEngine">
+      <HintPath>$(UnityEnginePath)\UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
   <!-- UnityEngine.UI only for modern frameworks (not available/used in net35) -->
-  <ItemGroup Condition="'$(TargetFramework)' != 'net35'">
+  <ItemGroup Condition="'$(TargetFramework)' != 'net35' And '$(UseUnityStubs)' != 'true'">
     <Reference Include="UnityEngine.UI">
       <HintPath>$(UnityEnginePath)\UnityEngine.UI.dll</HintPath>
       <Private>false</Private>
