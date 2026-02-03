@@ -20,9 +20,11 @@ namespace HeadCannon.Core.Unity.Utilities
         public static List<Image> FindCrosshairCandidates(bool searchInactive = true)
         {
             var candidates = new List<Image>();
+            #pragma warning disable CS0618 // FindObjectsOfType is obsolete but needed for Unity < 2022.1 compatibility
             var images = searchInactive
                 ? Resources.FindObjectsOfTypeAll<Image>()
-                : UnityEngine.Object.FindObjectsByType<Image>(FindObjectSortMode.None);
+                : UnityEngine.Object.FindObjectsOfType<Image>();
+            #pragma warning restore CS0618
 
             foreach (var image in images)
             {
@@ -49,9 +51,11 @@ namespace HeadCannon.Core.Unity.Utilities
         public static List<RawImage> FindRawImageCrosshairCandidates(bool searchInactive = true)
         {
             var candidates = new List<RawImage>();
+            #pragma warning disable CS0618 // FindObjectsOfType is obsolete but needed for Unity < 2022.1 compatibility
             var images = searchInactive
                 ? Resources.FindObjectsOfTypeAll<RawImage>()
-                : UnityEngine.Object.FindObjectsByType<RawImage>(FindObjectSortMode.None);
+                : UnityEngine.Object.FindObjectsOfType<RawImage>();
+            #pragma warning restore CS0618
 
             foreach (var image in images)
             {
