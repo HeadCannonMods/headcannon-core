@@ -56,6 +56,10 @@
       <HintPath>$(UnityEnginePath)\UnityEngine.TextRenderingModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule">
+      <HintPath>$(UnityEnginePath)\UnityEngine.InputLegacyModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <!-- Unity references for CI stub builds (all types in UnityEngine.dll only) -->
