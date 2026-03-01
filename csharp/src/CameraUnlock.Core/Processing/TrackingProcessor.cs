@@ -121,6 +121,18 @@ namespace CameraUnlock.Core.Processing
         }
 
         /// <summary>
+        /// Resets only the EMA smoothing state, preserving center offset.
+        /// Use on tracking regain to avoid blending from stale pre-loss values.
+        /// </summary>
+        public void ResetSmoothing()
+        {
+            _smoothedYaw = 0;
+            _smoothedPitch = 0;
+            _smoothedRoll = 0;
+            _hasSmoothedValue = false;
+        }
+
+        /// <summary>
         /// Resets the processor state.
         /// </summary>
         public void Reset()
