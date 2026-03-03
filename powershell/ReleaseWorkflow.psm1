@@ -55,6 +55,30 @@ function Test-GitTagExists {
 
 <#
 .SYNOPSIS
+    Tests if a commit subject is noise that should be filtered from changelogs and release notes.
+.PARAMETER Subject
+    Raw commit subject line (without any formatting prefix like "- ").
+.OUTPUTS
+    Boolean. $true if the commit is noise, $false if it should be included.
+#>
+function Test-NoiseCommit {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Subject
+    )
+
+    $noisePattern = '^(chore|refactor|internal|clean ?up|wip|fixup|squash|ci|build|test|style|docs)(\(.*?\))?:'
+    return (
+        $Subject -match $noisePattern -or
+        $Subject -match '^Merge ' -or
+        $Subject -match '^Release v\d+' -or
+        $Subject -match '^(bump|release|version)' -or
+        $Subject -match '^Update (cameraunlock|submodule)'
+    )
+}
+
+<#
+.SYNOPSIS
     Updates the version in a manifest.json file.
 .PARAMETER ManifestPath
     Path to the manifest.json file.
@@ -178,13 +202,7 @@ function New-ChangelogFromCommits {
     }
 
     # Filter out noise commits before categorization
-    $noisePattern = '^(chore|refactor|internal|clean ?up|wip|fixup|squash|ci|build|test|style|docs)(\(.*?\))?:'
-    $commits = @($commits | Where-Object {
-        $_ -notmatch $noisePattern -and
-        $_ -notmatch '^Merge ' -and
-        $_ -notmatch '^Release v\d+' -and
-        $_ -notmatch '^(bump|version)'
-    })
+    $commits = @($commits | Where-Object { -not (Test-NoiseCommit $_) })
 
     if ($commits.Count -eq 0) {
         throw "All commits in range '$commitRange' were filtered as noise. If this release has user-facing changes, use conventional commit prefixes (feat:, fix:, perf:) or create a RELEASE_NOTES.md override."
@@ -210,7 +228,7 @@ function New-ChangelogFromCommits {
 
     # Build new entry
     $date = Get-Date -Format 'yyyy-MM-dd'
-    $newEntry = "`n## [$Version] - $date`n`n"
+    $newEntry = "## [$Version] - $date`n`n"
 
     if ($features.Count -gt 0) {
         $newEntry += "### Added`n`n"
@@ -239,7 +257,8 @@ function New-ChangelogFromCommits {
         $changelog = $changelog -replace '(?s)(# Changelog.*?\n)', "`$1$newEntry"
     }
 
-    Set-Content $ChangelogPath $changelog
+    $changelog = $changelog.TrimEnd() + "`n"
+    Set-Content $ChangelogPath $changelog -NoNewline
 
     return @{
         AlreadyExists = $false
@@ -358,190 +377,57 @@ function New-ReleaseTag {
 
 <#
 .SYNOPSIS
-    Runs the full release workflow for a mod.
-.PARAMETER Version
-    Version to release (e.g., "1.0.1").
-.PARAMETER ModName
-    Display name of the mod (e.g., "Subnautica Head Tracking").
-.PARAMETER ManifestPath
-    Path to manifest.json (default: "manifest.json").
-.PARAMETER ChangelogPath
-    Path to CHANGELOG.md (default: "CHANGELOG.md").
-.PARAMETER BuildCommand
-    Build command to run (e.g., "dotnet build MyMod.csproj --configuration Release").
-.PARAMETER ValidationScript
-    Optional path to validation script to run before build.
-.PARAMETER GitHubRepo
-    GitHub repository for the release URL (e.g., "udkyo/subnautica-head-tracking").
-.PARAMETER Branch
-    Git branch to push to (default: main).
+    Gets the version from a .csproj file.
+.PARAMETER CsprojPath
+    Path to the .csproj file.
 .OUTPUTS
-    None. Writes progress to host and throws on failure.
+    String containing the version.
 #>
-function Invoke-ModRelease {
+function Get-CsprojVersion {
     param(
         [Parameter(Mandatory=$true)]
-        [string]$Version,
-        [Parameter(Mandatory=$true)]
-        [string]$ModName,
-        [string]$ManifestPath = "manifest.json",
-        [string]$ChangelogPath = "CHANGELOG.md",
-        [Parameter(Mandatory=$true)]
-        [string]$BuildCommand,
-        [string]$ValidationScript = $null,
-        [string]$GitHubRepo = $null,
-        [string]$Branch = "main"
+        [string]$CsprojPath
     )
 
-    Write-Host "======================================" -ForegroundColor Cyan
-    Write-Host "   $ModName Release" -ForegroundColor Cyan
-    Write-Host "======================================" -ForegroundColor Cyan
-    Write-Host ""
-
-    # Validate version format
-    if (-not (Test-SemanticVersion -Version $Version)) {
-        Write-Host "ERROR: Version '$Version' is not valid semantic versioning" -ForegroundColor Red
-        Write-Host "Use format: X.Y.Z (e.g., 1.0.1)" -ForegroundColor Yellow
-        exit 1
+    if (-not (Test-Path $CsprojPath)) {
+        throw "csproj not found: $CsprojPath"
     }
 
-    Write-Host "Target version: $Version" -ForegroundColor Green
-    Write-Host ""
-
-    # Step 1: Check git status
-    Write-Host "[1/8] Checking git repository status..." -ForegroundColor Cyan
-    try {
-        if (-not (Test-CleanGitStatus)) {
-            Write-Host "ERROR: Working directory has uncommitted changes:" -ForegroundColor Red
-            git status --short
-            Write-Host ""
-            Write-Host "Please commit or stash changes before releasing" -ForegroundColor Yellow
-            exit 1
-        }
-    } catch {
-        Write-Host "ERROR: $_" -ForegroundColor Red
-        exit 1
+    $content = Get-Content $CsprojPath -Raw
+    if ($content -match '<Version>([^<]+)</Version>') {
+        return $matches[1]
     }
-    Write-Host "Working directory is clean" -ForegroundColor Green
-    Write-Host ""
 
-    # Step 2: Check if tag already exists
-    Write-Host "[2/8] Checking if tag v$Version already exists..." -ForegroundColor Cyan
-    if (Test-GitTagExists -Tag "v$Version") {
-        Write-Host "ERROR: Git tag v$Version already exists" -ForegroundColor Red
-        Write-Host "Choose a different version number" -ForegroundColor Yellow
-        exit 1
+    throw "No <Version> element found in $CsprojPath"
+}
+
+<#
+.SYNOPSIS
+    Sets the version in a .csproj file.
+.PARAMETER CsprojPath
+    Path to the .csproj file.
+.PARAMETER Version
+    New version to set.
+#>
+function Set-CsprojVersion {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$CsprojPath,
+        [Parameter(Mandatory=$true)]
+        [string]$Version
+    )
+
+    if (-not (Test-Path $CsprojPath)) {
+        throw "csproj not found: $CsprojPath"
     }
-    Write-Host "Tag v$Version is available" -ForegroundColor Green
-    Write-Host ""
 
-    # Step 3: Update manifest.json
-    Write-Host "[3/8] Checking manifest.json..." -ForegroundColor Cyan
-    try {
-        $manifestResult = Update-ManifestVersion -ManifestPath $ManifestPath -Version $Version
-        if ($manifestResult.Updated) {
-            Write-Host "  Updated version: $($manifestResult.OldVersion) -> $Version" -ForegroundColor Yellow
-        }
-        Write-Host "manifest.json at version $Version" -ForegroundColor Green
-    } catch {
-        Write-Host "ERROR: $_" -ForegroundColor Red
-        exit 1
+    $content = Get-Content $CsprojPath -Raw
+    if ($content -notmatch '<Version>[^<]+</Version>') {
+        throw "No <Version> element found in $CsprojPath"
     }
-    Write-Host ""
 
-    # Step 4: Update CHANGELOG.md
-    Write-Host "[4/8] Generating CHANGELOG.md from git history..." -ForegroundColor Cyan
-    try {
-        $changelogResult = New-ChangelogFromCommits -ChangelogPath $ChangelogPath -Version $Version
-        if ($changelogResult.AlreadyExists) {
-            Write-Host "CHANGELOG.md already has entry for v$Version" -ForegroundColor Green
-        } else {
-            Write-Host "CHANGELOG.md generated from commits" -ForegroundColor Green
-            Write-Host "   Found: $($changelogResult.Features) features, $($changelogResult.Fixes) fixes, $($changelogResult.Changes) changes" -ForegroundColor Gray
-        }
-    } catch {
-        Write-Host "ERROR: $_" -ForegroundColor Red
-        exit 1
-    }
-    Write-Host ""
-
-    # Step 5: Run validation checks
-    Write-Host "[5/8] Running pre-release validation..." -ForegroundColor Cyan
-    if ($ValidationScript -and (Test-Path $ValidationScript)) {
-        & $ValidationScript
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "ERROR: Validation failed" -ForegroundColor Red
-            exit 1
-        }
-    } else {
-        Write-Host "Warning: No validation script specified, skipping validation" -ForegroundColor Yellow
-    }
-    Write-Host ""
-
-    # Step 6: Build release version
-    Write-Host "[6/8] Building release version..." -ForegroundColor Cyan
-    try {
-        $buildOutput = Invoke-Expression $BuildCommand 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "ERROR: Build failed" -ForegroundColor Red
-            Write-Host $buildOutput
-            exit 1
-        }
-        Write-Host "Build succeeded" -ForegroundColor Green
-    } catch {
-        Write-Host "ERROR: Build failed with exception" -ForegroundColor Red
-        Write-Host $_.Exception.Message -ForegroundColor Red
-        exit 1
-    }
-    Write-Host ""
-
-    # Step 7: Commit changes
-    Write-Host "[7/8] Committing version bump..." -ForegroundColor Cyan
-    try {
-        $committed = Invoke-VersionCommit -Version $Version -Files @($ManifestPath, $ChangelogPath)
-        if ($committed) {
-            Write-Host "Changes committed" -ForegroundColor Green
-        } else {
-            Write-Host "No changes to commit (version and changelog already up to date)" -ForegroundColor Green
-        }
-    } catch {
-        Write-Host "ERROR: $_" -ForegroundColor Red
-        exit 1
-    }
-    Write-Host ""
-
-    # Step 8: Create and push tag
-    Write-Host "[8/8] Creating and pushing release tag..." -ForegroundColor Cyan
-    try {
-        $tagMessage = "Release v$Version"
-        $changelogSection = Get-ChangelogSection -ChangelogPath $ChangelogPath -Version $Version
-        if ($changelogSection) {
-            $tagMessage = "Release v$Version`n`n$changelogSection"
-        }
-        New-ReleaseTag -Version $Version -Message $tagMessage -Branch $Branch
-        Write-Host "Tag v$Version created and pushed" -ForegroundColor Green
-    } catch {
-        Write-Host "ERROR: $_" -ForegroundColor Red
-        exit 1
-    }
-    Write-Host ""
-
-    # Success!
-    Write-Host "======================================" -ForegroundColor Green
-    Write-Host "   Release Complete!" -ForegroundColor Green
-    Write-Host "======================================" -ForegroundColor Green
-    Write-Host ""
-    Write-Host "Version $Version has been released!" -ForegroundColor Cyan
-    Write-Host ""
-
-    if ($GitHubRepo) {
-        Write-Host "Next steps:" -ForegroundColor Yellow
-        Write-Host "  1. GitHub Actions will automatically build and create the release" -ForegroundColor White
-        Write-Host "  2. Monitor the workflow at: https://github.com/$GitHubRepo/actions" -ForegroundColor White
-        Write-Host "  3. Once complete, the release will be available at:" -ForegroundColor White
-        Write-Host "     https://github.com/$GitHubRepo/releases/tag/v$Version" -ForegroundColor White
-        Write-Host ""
-    }
+    $content = $content -replace '<Version>[^<]+</Version>', "<Version>$Version</Version>"
+    $content | Set-Content $CsprojPath -NoNewline
 }
 
 # Export functions
@@ -549,10 +435,12 @@ Export-ModuleMember -Function @(
     'Test-SemanticVersion',
     'Test-CleanGitStatus',
     'Test-GitTagExists',
+    'Test-NoiseCommit',
     'Update-ManifestVersion',
     'New-ChangelogFromCommits',
     'Get-ChangelogSection',
     'Invoke-VersionCommit',
     'New-ReleaseTag',
-    'Invoke-ModRelease'
+    'Get-CsprojVersion',
+    'Set-CsprojVersion'
 )
