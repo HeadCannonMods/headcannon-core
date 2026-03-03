@@ -65,7 +65,7 @@ jobs:
       - name: Validate version matches csproj
         shell: pwsh
         run: |
-          Import-Module cameraunlock-core/powershell/ReleaseWorkflow.psm1 -Force
+          Import-Module ./cameraunlock-core/powershell/ReleaseWorkflow.psm1 -Force
           $csprojVersion = Get-CsprojVersion "${{ inputs.csproj-path }}"
           $tagVersion = "${{ steps.version.outputs.version }}"
 
