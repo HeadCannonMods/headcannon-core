@@ -41,6 +41,9 @@ namespace CameraUnlock.Core.Unity.Rendering
         private int _currentThickness;
         private int _lastScreenHeight;
         private Color _reticleColor = Color.white;
+        private Color _outlineColor = new Color(0, 0, 0, 0);
+        private int _outlineWidthAt1080p = 0;
+        private int _currentOutlineWidth;
         private bool _isVisible = true;
         private ReticleStyle _style = ReticleStyle.Dot;
 
@@ -120,6 +123,38 @@ namespace CameraUnlock.Core.Unity.Rendering
         }
 
         /// <summary>
+        /// Gets or sets the outline color. Set alpha to 0 to disable outline.
+        /// </summary>
+        public Color OutlineColor
+        {
+            get => _outlineColor;
+            set
+            {
+                if (value != _outlineColor)
+                {
+                    _outlineColor = value;
+                    RecreateTexture();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the outline width at 1080p in pixels. 0 = no outline.
+        /// </summary>
+        public int OutlineWidthAt1080p
+        {
+            get => _outlineWidthAt1080p;
+            set
+            {
+                if (value != _outlineWidthAt1080p)
+                {
+                    _outlineWidthAt1080p = Mathf.Max(0, value);
+                    RecreateTexture();
+                }
+            }
+        }
+
+        /// <summary>
         /// Initializes the reticle with a position provider.
         /// </summary>
         /// <param name="positionProvider">
@@ -162,8 +197,17 @@ namespace CameraUnlock.Core.Unity.Rendering
         private int ComputeScaledSize()
         {
             float scale = (float)Screen.height / ReferenceHeight;
-            int size = Mathf.RoundToInt(_baseSizeAt1080p * scale);
+            int totalBase = _baseSizeAt1080p + _outlineWidthAt1080p * 2;
+            int size = Mathf.RoundToInt(totalBase * scale);
             return Mathf.Max(2, size);
+        }
+
+        private int ComputeScaledOutlineWidth()
+        {
+            if (_outlineWidthAt1080p <= 0) return 0;
+            float scale = (float)Screen.height / ReferenceHeight;
+            int width = Mathf.RoundToInt(_outlineWidthAt1080p * scale);
+            return Mathf.Max(1, width);
         }
 
         private int ComputeScaledThickness()
@@ -177,11 +221,14 @@ namespace CameraUnlock.Core.Unity.Rendering
         {
             int scaledSize = ComputeScaledSize();
             int scaledThickness = ComputeScaledThickness();
+            int scaledOutline = ComputeScaledOutlineWidth();
             if (_reticleTexture == null || scaledSize != _currentTextureSize ||
-                scaledThickness != _currentThickness || Screen.height != _lastScreenHeight)
+                scaledThickness != _currentThickness || scaledOutline != _currentOutlineWidth ||
+                Screen.height != _lastScreenHeight)
             {
                 _currentTextureSize = scaledSize;
                 _currentThickness = scaledThickness;
+                _currentOutlineWidth = scaledOutline;
                 _lastScreenHeight = Screen.height;
                 RecreateTexture();
             }
@@ -212,9 +259,12 @@ namespace CameraUnlock.Core.Unity.Rendering
             float center = (size - 1) * 0.5f;
             float radius = size * 0.5f;
 
+            float outlineWidth = _currentOutlineWidth;
+            float innerRadius = radius - outlineWidth;
+            if (innerRadius < 0) innerRadius = 0;
+
             if (_style == ReticleStyle.Dot)
             {
-                // Draw filled circle with anti-aliased edge
                 for (int y = 0; y < size; y++)
                 {
                     for (int x = 0; x < size; x++)
@@ -223,11 +273,23 @@ namespace CameraUnlock.Core.Unity.Rendering
                         float dy = y - center;
                         float dist = Mathf.Sqrt(dx * dx + dy * dy);
 
-                        if (dist <= radius)
+                        if (dist > radius) continue;
+
+                        float outerAlpha = Mathf.Clamp01(radius - dist + 0.5f);
+
+                        if (outlineWidth > 0 && dist > innerRadius)
                         {
-                            float alpha = Mathf.Clamp01(radius - dist + 0.5f);
+                            // Outline region: blend from fill to outline at inner edge
+                            float outlineAlpha = Mathf.Clamp01(dist - innerRadius + 0.5f);
+                            Color pixelColor = Color.Lerp(_reticleColor, _outlineColor, outlineAlpha);
+                            pixelColor.a *= outerAlpha;
+                            pixels[y * size + x] = pixelColor;
+                        }
+                        else
+                        {
+                            // Fill region
                             Color pixelColor = _reticleColor;
-                            pixelColor.a *= alpha;
+                            pixelColor.a *= outerAlpha;
                             pixels[y * size + x] = pixelColor;
                         }
                     }
@@ -235,10 +297,9 @@ namespace CameraUnlock.Core.Unity.Rendering
             }
             else // Circle style
             {
-                // Draw circle outline with anti-aliased edges
-                float thickness = _currentThickness;
-                float innerRadius = radius - thickness;
-                if (innerRadius < 0) innerRadius = 0;
+                float ringThickness = _currentThickness;
+                float ringInner = innerRadius - ringThickness;
+                if (ringInner < 0) ringInner = 0;
 
                 for (int y = 0; y < size; y++)
                 {
@@ -248,15 +309,35 @@ namespace CameraUnlock.Core.Unity.Rendering
                         float dy = y - center;
                         float dist = Mathf.Sqrt(dx * dx + dy * dy);
 
-                        // Anti-aliased ring: fade in at inner edge, fade out at outer edge
-                        float outerAlpha = Mathf.Clamp01(radius - dist + 0.5f);
-                        float innerAlpha = Mathf.Clamp01(dist - innerRadius + 0.5f);
-                        float alpha = outerAlpha * innerAlpha;
-
-                        if (alpha > 0)
+                        // Outer outline band
+                        if (outlineWidth > 0 && dist > innerRadius && dist <= radius)
                         {
-                            Color pixelColor = _reticleColor;
-                            pixelColor.a *= alpha;
+                            float outerAlpha = Mathf.Clamp01(radius - dist + 0.5f);
+                            float blendAlpha = Mathf.Clamp01(dist - innerRadius + 0.5f);
+                            Color pixelColor = Color.Lerp(_reticleColor, _outlineColor, blendAlpha);
+                            pixelColor.a *= outerAlpha;
+                            pixels[y * size + x] = pixelColor;
+                        }
+                        // Ring body
+                        else if (dist >= ringInner && dist <= innerRadius)
+                        {
+                            float outerAlpha = Mathf.Clamp01(innerRadius - dist + 0.5f);
+                            float innerAlpha = Mathf.Clamp01(dist - ringInner + 0.5f);
+                            float alpha = outerAlpha * innerAlpha;
+                            if (alpha > 0)
+                            {
+                                Color pixelColor = _reticleColor;
+                                pixelColor.a *= alpha;
+                                pixels[y * size + x] = pixelColor;
+                            }
+                        }
+                        // Inner outline band
+                        else if (outlineWidth > 0 && dist < ringInner && dist >= ringInner - outlineWidth)
+                        {
+                            float blendAlpha = Mathf.Clamp01(ringInner - dist + 0.5f);
+                            float fadeAlpha = Mathf.Clamp01(dist - (ringInner - outlineWidth) + 0.5f);
+                            Color pixelColor = Color.Lerp(_reticleColor, _outlineColor, blendAlpha);
+                            pixelColor.a *= fadeAlpha;
                             pixels[y * size + x] = pixelColor;
                         }
                     }
