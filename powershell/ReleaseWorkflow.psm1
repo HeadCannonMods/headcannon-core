@@ -150,7 +150,8 @@ function New-ChangelogFromCommits {
         [string]$ChangelogPath,
         [Parameter(Mandatory=$true)]
         [string]$Version,
-        [string[]]$ArtifactPaths
+        [string[]]$ArtifactPaths,
+        [switch]$IncludeAll
     )
 
     if (-not (Test-Path $ChangelogPath)) {
@@ -202,10 +203,12 @@ function New-ChangelogFromCommits {
     }
 
     # Filter out noise commits before categorization
-    $commits = @($commits | Where-Object { -not (Test-NoiseCommit $_) })
+    if (-not $IncludeAll) {
+        $commits = @($commits | Where-Object { -not (Test-NoiseCommit $_) })
 
-    if ($commits.Count -eq 0) {
-        throw "All commits in range '$commitRange' were filtered as noise. If this release has user-facing changes, use conventional commit prefixes (feat:, fix:, perf:) or create a RELEASE_NOTES.md override."
+        if ($commits.Count -eq 0) {
+            throw "All commits in range '$commitRange' were filtered as noise. If this release has user-facing changes, use conventional commit prefixes (feat:, fix:, perf:) or create a RELEASE_NOTES.md override."
+        }
     }
 
     # Categorize commits using conventional commit format
