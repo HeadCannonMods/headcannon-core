@@ -51,6 +51,10 @@ public:
     /// @return True if data is available.
     bool GetRotation(float& yaw, float& pitch, float& roll) const;
 
+    /// Gets the current position values (in mm, from OpenTrack).
+    /// @return True if position data is available.
+    bool GetPosition(float& x, float& y, float& z) const;
+
     /// Sets the current position as the new center point.
     void Recenter();
 
@@ -70,6 +74,12 @@ private:
     std::atomic<float> m_yawOffset{0.0f};
     std::atomic<float> m_pitchOffset{0.0f};
     std::atomic<float> m_rollOffset{0.0f};
+
+    // Position data (mm, from OpenTrack)
+    std::atomic<float> m_posX{0.0f};
+    std::atomic<float> m_posY{0.0f};
+    std::atomic<float> m_posZ{0.0f};
+    std::atomic<bool> m_hasPosition{false};
 
     // Timestamp for connection detection
     std::atomic<int64_t> m_lastReceiveTimestamp{0};

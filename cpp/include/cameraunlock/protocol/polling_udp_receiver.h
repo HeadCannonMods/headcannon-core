@@ -60,6 +60,10 @@ public:
     /// @return True if valid data is available.
     bool GetRotation(float& yaw, float& pitch, float& roll) const;
 
+    /// Gets the latest position values (in mm, from OpenTrack).
+    /// @return True if position data is available.
+    bool GetPosition(float& x, float& y, float& z) const;
+
     /// Sets the current position as the new center point.
     void Recenter();
 
@@ -86,11 +90,17 @@ private:
     UdpSocket m_socket;
     bool m_initialized = false;
 
-    // Latest received data (rotation only, in degrees)
+    // Latest received data (rotation in degrees)
     float m_yaw = 0.0f;
     float m_pitch = 0.0f;
     float m_roll = 0.0f;
     bool m_hasData = false;
+
+    // Latest received position data (in mm)
+    float m_posX = 0.0f;
+    float m_posY = 0.0f;
+    float m_posZ = 0.0f;
+    bool m_hasPosition = false;
 
     // Center offset for recentering
     float m_yawOffset = 0.0f;

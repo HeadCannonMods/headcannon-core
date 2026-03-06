@@ -1,5 +1,6 @@
 #include "cameraunlock/protocol/udp_receiver.h"
 #include "cameraunlock/protocol/opentrack_packet.h"
+#include "cameraunlock/data/position_data.h"
 #include <chrono>
 
 namespace cameraunlock {
@@ -46,6 +47,10 @@ void UdpReceiver::Stop() {
     m_yawOffset.store(0.0f, std::memory_order_relaxed);
     m_pitchOffset.store(0.0f, std::memory_order_relaxed);
     m_rollOffset.store(0.0f, std::memory_order_relaxed);
+    m_posX.store(0.0f, std::memory_order_relaxed);
+    m_posY.store(0.0f, std::memory_order_relaxed);
+    m_posZ.store(0.0f, std::memory_order_relaxed);
+    m_hasPosition.store(false, std::memory_order_relaxed);
     m_lastReceiveTimestamp.store(0, std::memory_order_relaxed);
     m_isRemoteConnection.store(false, std::memory_order_relaxed);
 }
@@ -72,6 +77,16 @@ bool UdpReceiver::GetRotation(float& yaw, float& pitch, float& roll) const {
     pitch = rawPitch - m_pitchOffset.load(std::memory_order_relaxed);
     roll = rawRoll - m_rollOffset.load(std::memory_order_relaxed);
 
+    return true;
+}
+
+bool UdpReceiver::GetPosition(float& x, float& y, float& z) const {
+    if (!m_hasPosition.load(std::memory_order_relaxed)) {
+        return false;
+    }
+    x = m_posX.load(std::memory_order_relaxed);
+    y = m_posY.load(std::memory_order_relaxed);
+    z = m_posZ.load(std::memory_order_relaxed);
     return true;
 }
 
@@ -126,8 +141,15 @@ void UdpReceiver::ReceiverThread() {
 
         if (bytesReceived >= static_cast<int>(OpenTrackPacket::kMinPacketSize)) {
             TrackingPose pose;
-            if (OpenTrackPacket::TryParse(buffer, bytesReceived, pose)) {
+            PositionData position;
+            if (OpenTrackPacket::TryParseAll(buffer, bytesReceived, pose, position)) {
                 m_trackingData.Set(pose.yaw, pose.pitch, pose.roll);
+
+                // Store position data
+                m_posX.store(position.x, std::memory_order_relaxed);
+                m_posY.store(position.y, std::memory_order_relaxed);
+                m_posZ.store(position.z, std::memory_order_relaxed);
+                m_hasPosition.store(true, std::memory_order_relaxed);
 
                 m_isRemoteConnection.store(IsRemoteAddress(senderAddr), std::memory_order_relaxed);
 

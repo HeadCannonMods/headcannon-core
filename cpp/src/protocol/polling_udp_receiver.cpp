@@ -1,5 +1,6 @@
 #include "cameraunlock/protocol/polling_udp_receiver.h"
 #include "cameraunlock/protocol/opentrack_packet.h"
+#include "cameraunlock/data/position_data.h"
 
 #include <cmath>
 #include <cstring>
@@ -180,10 +181,21 @@ bool PollingUdpReceiver::IsConnected() const {
     return elapsed < kConnectionTimeoutMs;
 }
 
+bool PollingUdpReceiver::GetPosition(float& x, float& y, float& z) const {
+    if (!m_hasPosition) {
+        return false;
+    }
+    x = m_posX;
+    y = m_posY;
+    z = m_posZ;
+    return true;
+}
+
 bool PollingUdpReceiver::ParsePacket(const char* buffer, int bytesReceived) {
-    // Use shared OpenTrack packet parsing
+    // Use shared OpenTrack packet parsing (rotation + position)
     TrackingPose pose;
-    if (!OpenTrackPacket::TryParse(buffer, static_cast<size_t>(bytesReceived), pose)) {
+    PositionData position;
+    if (!OpenTrackPacket::TryParseAll(buffer, static_cast<size_t>(bytesReceived), pose, position)) {
         return false;
     }
 
@@ -191,6 +203,11 @@ bool PollingUdpReceiver::ParsePacket(const char* buffer, int bytesReceived) {
     m_pitch = pose.pitch;
     m_roll = pose.roll;
     m_hasData = true;
+
+    m_posX = position.x;
+    m_posY = position.y;
+    m_posZ = position.z;
+    m_hasPosition = true;
 
     return true;
 }
