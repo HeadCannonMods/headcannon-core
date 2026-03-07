@@ -35,31 +35,19 @@ struct ScreenPosition {
 // Constants
 constexpr float kDegToRad = 0.0174532925f;  // pi / 180
 
-// Project crosshair position based on head tracking and camera state
+// Project crosshair position based on head tracking and camera state.
 // This computes where the "body aim" direction appears on screen when
 // the camera has been rotated by head tracking.
 //
-// The crosshair represents where the player's body is actually aiming,
-// which moves opposite to head movement on screen.
+// The rotation model uses camera-local axes:
+//   Yaw around camera up (0,1,0), Pitch around camera right (0,0,-1).
+//   Only forward is rotated; up is re-derived.
+// This matches ApplyHeadTrackingRotation in rotation_math.h.
 //
-// Coordinate system assumption (modify for your game):
-// - Forward is +X
-// - Up is +Y
-// - Right is -Z (left-handed, Z points left)
+// Coordinate system: X=forward, Y=up, Z=left (DL2)
 inline ScreenPosition ProjectCrosshair(const CrosshairProjectionParams& params) {
     ScreenPosition result;
     result.valid = false;
-
-    // Convert angles to radians
-    // Negate so crosshair moves opposite to head movement
-    float yawRad = -params.yawOffset * kDegToRad;
-    float pitchRad = -params.pitchOffset * kDegToRad;
-    float rollRad = -params.rollOffset * kDegToRad;
-
-    // Precompute trig values
-    float cosYaw = std::cos(yawRad), sinYaw = std::sin(yawRad);
-    float cosPitch = std::cos(pitchRad), sinPitch = std::sin(pitchRad);
-    float cosRoll = std::cos(rollRad), sinRoll = std::sin(rollRad);
 
     // FOV for perspective projection
     float aspectRatio = params.screenWidth / params.screenHeight;
@@ -67,66 +55,73 @@ inline ScreenPosition ProjectCrosshair(const CrosshairProjectionParams& params) 
     float tanHalfHFov = std::tan(hFovRad / 2.0f);
     float tanHalfVFov = tanHalfHFov / aspectRatio;
 
-    // Body starts at camera forward (1, 0, 0) in camera space before head rotation
-    float bx = 1.0f, by = 0.0f, bz = 0.0f;
+    // Match camera hook sign conventions exactly:
+    //   yaw = -processedYaw * DEG_TO_RAD
+    //   pitch = processedPitch * DEG_TO_RAD
+    //   roll = processedRoll * DEG_TO_RAD
+    float yawRad = -params.yawOffset * kDegToRad;
+    float pitchRad = params.pitchOffset * kDegToRad;
+    float rollRad = params.rollOffset * kDegToRad;
 
-    // World up in camera space (when camera is pitched, world up tilts)
-    // Coordinate system: X=forward, Y=up, Z=left
-    float gamePitch = params.gameCameraPitch;
-    float worldUpX = std::sin(gamePitch);
-    float worldUpY = std::cos(gamePitch);
+    // Camera space before head tracking: fwd=(1,0,0), up=(0,1,0), right=(0,0,-1)
+    // Construct forward from spherical coordinates — matches ApplyHeadTrackingRotation.
+    // This ensures yaw and pitch are independent (no arc artifacts).
+    float cosY = std::cos(yawRad), sinY = std::sin(yawRad);
+    float cosP = std::cos(pitchRad), sinP = std::sin(pitchRad);
 
-    // Game applies rotation order: Yaw (world Y) -> Pitch (post-yaw right) -> Roll (post-yaw-pitch forward)
-    // We compute inverse to find where body aims in head-rotated camera space
+    // fwd = cosP*cosY*forward + cosP*sinY*right - sinP*up
+    // In camera space: forward=(1,0,0), up=(0,1,0), right=(0,0,-1)
+    float fwd[3] = {
+        cosP * cosY,        // forward component
+        -sinP,              // vertical component
+        -cosP * sinY        // horizontal component (right = -Z in DL2)
+    };
 
-    // Compute post-yaw right axis by rotating original right (0,0,-1) around worldUp by yaw
-    float postYawRightX = -worldUpY * sinYaw;
-    float postYawRightY = worldUpX * sinYaw;
-    float postYawRightZ = -cosYaw;
-
-    // Compute post-yaw forward by rotating original forward (1,0,0) around worldUp by yaw
-    float omcYaw = 1.0f - cosYaw;
-    float postYawFwdX = cosYaw + worldUpX * worldUpX * omcYaw;
-    float postYawFwdY = worldUpX * worldUpY * omcYaw;
-    float postYawFwdZ = -worldUpY * sinYaw;
-
-    // Compute final forward by rotating post-yaw forward around post-yaw right by pitch
-    float finalFwdAxis[3] = { postYawRightX, postYawRightY, postYawRightZ };
-    float postYawFwd[3] = { postYawFwdX, postYawFwdY, postYawFwdZ };
-    float finalFwd[3];
-    cameraunlock::math::RotateAroundAxis(postYawFwd, finalFwdAxis, cosPitch, sinPitch, finalFwd);
-
-    // Step 1: Inverse roll around final forward axis
-    float b1[3];
-    float bodyIn[3] = { bx, by, bz };
-    cameraunlock::math::RotateAroundAxis(bodyIn, finalFwd, cosRoll, -sinRoll, b1);
-
-    // Step 2: Inverse pitch around post-yaw right axis
-    float b2[3];
-    cameraunlock::math::RotateAroundAxis(b1, finalFwdAxis, cosPitch, -sinPitch, b2);
-
-    // Step 3: Inverse yaw around world up axis
-    float worldUp[3] = { worldUpX, worldUpY, 0.0f };
-    float bodyFinal[3];
-    cameraunlock::math::RotateAroundAxis(b2, worldUp, cosYaw, -sinYaw, bodyFinal);
-
-    bx = bodyFinal[0];
-    by = bodyFinal[1];
-    bz = bodyFinal[2];
-
-    // Prevent division by zero when looking backwards
-    if (bx < 0.01f) bx = 0.01f;
-
-    // Check for NaN
-    if (bx != bx || by != by || bz != bz) {
-        bx = 1.0f; by = 0.0f; bz = 0.0f;
+    // Re-derive up: project origUp=(0,1,0) perpendicular to new fwd
+    float origUp[3] = {0.0f, 1.0f, 0.0f};
+    float dot = cameraunlock::math::Dot3(fwd, origUp);
+    float newUp[3] = {origUp[0] - fwd[0] * dot, origUp[1] - fwd[1] * dot, origUp[2] - fwd[2] * dot};
+    if (cameraunlock::math::Normalize3(newUp) < 0.0001f) {
+        result.x = params.screenWidth / 2.0f;
+        result.y = params.screenHeight / 2.0f;
+        result.valid = true;
+        return result;
     }
 
-    // Project to normalized screen coordinates using perspective division
-    float normalizedX = bz / (bx * tanHalfHFov);
-    float normalizedY = by / (bx * tanHalfVFov);
+    // Roll: rotate up around new fwd
+    if (std::fabs(rollRad) >= 0.001f) {
+        float tmp[3];
+        cameraunlock::math::RotateAroundAxis(newUp, fwd, rollRad, tmp);
+        newUp[0] = tmp[0]; newUp[1] = tmp[1]; newUp[2] = tmp[2];
+    }
 
-    // Convert to screen pixels (Y is inverted for screen coordinates)
+    // Left axis of new camera frame
+    float newLeft[3];
+    cameraunlock::math::Cross3(fwd, newUp, newLeft);
+
+    // Body aim = (1,0,0) projected into new camera frame.
+    // Since body = (1,0,0), dot products simplify to [0] components.
+    float bDepth = fwd[0];
+    float bUp    = newUp[0];
+    float bLeft  = newLeft[0];
+
+    // Prevent division by zero (body aim behind camera)
+    if (bDepth < 0.01f) bDepth = 0.01f;
+
+    // NaN check
+    if (bDepth != bDepth || bUp != bUp || bLeft != bLeft) {
+        result.x = params.screenWidth / 2.0f;
+        result.y = params.screenHeight / 2.0f;
+        result.valid = true;
+        return result;
+    }
+
+    // Perspective projection.
+    // Signs determined empirically to match the tracking pipeline conventions.
+    float normalizedX = bLeft / (bDepth * tanHalfHFov);
+    float normalizedY = -bUp / (bDepth * tanHalfVFov);
+
+    // Convert to screen pixels (Y inverted for screen coordinates)
     float cx = (params.screenWidth / 2.0f) + normalizedX * (params.screenWidth / 2.0f);
     float cy = (params.screenHeight / 2.0f) - normalizedY * (params.screenHeight / 2.0f);
 

@@ -47,6 +47,10 @@ public:
     /// True if initialization failed.
     bool IsFailed() const { return m_failed; }
 
+    /// Timestamp of the last received packet (microseconds since epoch).
+    /// Compare across frames to detect new samples for interpolation.
+    int64_t GetLastReceiveTimestamp() const { return m_lastReceiveTimestamp.load(std::memory_order_relaxed); }
+
     /// Gets the current rotation values with offset applied.
     /// @return True if data is available.
     bool GetRotation(float& yaw, float& pitch, float& roll) const;
