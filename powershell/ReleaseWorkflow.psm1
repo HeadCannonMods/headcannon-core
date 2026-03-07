@@ -171,7 +171,11 @@ function New-ChangelogFromCommits {
     }
 
     # Get commits since last tag
+    # Temporarily allow errors so git describe doesn't throw when there are no tags
+    $prevPref = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
     $lastTag = git describe --tags --abbrev=0 2>$null
+    $ErrorActionPreference = $prevPref
     if ($LASTEXITCODE -ne 0) {
         # First release - use all commits
         $commitRange = "HEAD"
