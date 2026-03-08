@@ -114,7 +114,19 @@ public static class ScreenCenterPatcher
                 return false;
         }
 
-        il.InsertBefore(retInstruction, il.Create(OpCodes.Call, methodToCall));
+        var callInstruction = il.Create(OpCodes.Call, methodToCall);
+        il.InsertBefore(retInstruction, callInstruction);
+
+        // Redirect all branches that targeted ret to target our call instead,
+        // so the injected call runs on ALL exit paths (not just fall-through).
+        foreach (var instr in targetMethod.Body.Instructions)
+        {
+            if (instr.Operand == retInstruction)
+            {
+                instr.Operand = callInstruction;
+            }
+        }
+
         return true;
     }
 
