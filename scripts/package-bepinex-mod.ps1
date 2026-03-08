@@ -97,7 +97,7 @@ foreach ($dll in $ModDlls) {
 }
 
 # Copy documentation
-$docFiles = @("README.md", "LICENSE", "CHANGELOG.md")
+$docFiles = @("README.md", "LICENSE", "CHANGELOG.md", "THIRD-PARTY-NOTICES.md", "THIRD-PARTY-NOTICES.txt")
 foreach ($doc in $docFiles) {
     $docPath = Join-Path $ProjectRoot $doc
     if (Test-Path $docPath) {
