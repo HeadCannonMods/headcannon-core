@@ -8,17 +8,17 @@ namespace CameraUnlock.Core.Tests.Math
         private const float DeltaTime60Fps = 1f / 60f;
 
         [Fact]
-        public void CalculateSmoothingFactor_ZeroSmoothing_ReturnsOne()
+        public void CalculateSmoothingFactor_ZeroSmoothing_ReturnsHighButNotOne()
         {
             float result = SmoothingUtils.CalculateSmoothingFactor(0f, DeltaTime60Fps);
-            Assert.Equal(1f, result);
+            Assert.InRange(result, 0.5f, 0.99f);
         }
 
         [Fact]
-        public void CalculateSmoothingFactor_VerySmallSmoothing_ReturnsOne()
+        public void CalculateSmoothingFactor_VerySmallSmoothing_ReturnsHighButNotOne()
         {
             float result = SmoothingUtils.CalculateSmoothingFactor(0.0001f, DeltaTime60Fps);
-            Assert.Equal(1f, result);
+            Assert.InRange(result, 0.5f, 0.99f);
         }
 
         [Fact]
@@ -65,12 +65,12 @@ namespace CameraUnlock.Core.Tests.Math
         }
 
         [Fact]
-        public void Smooth_ZeroSmoothing_ReturnsTarget()
+        public void Smooth_ZeroSmoothing_MovesSignificantlyTowardsTarget()
         {
             float current = 0f;
             float target = 100f;
             float result = SmoothingUtils.Smooth(current, target, 0f, DeltaTime60Fps);
-            Assert.Equal(100f, result);
+            Assert.InRange(result, 50f, 99f);
         }
 
         [Fact]

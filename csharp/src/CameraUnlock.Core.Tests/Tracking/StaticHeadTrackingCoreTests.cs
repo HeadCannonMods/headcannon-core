@@ -282,6 +282,7 @@ namespace CameraUnlock.Core.Tests.Tracking
             public bool AimDecouplingEnabled { get; set; } = true;
             public bool ShowDecoupledReticle { get; set; } = true;
             public float[] ReticleColorRgba { get; set; } = new[] { 1f, 1f, 1f, 1f };
+            public float Smoothing { get; set; } = 0f;
         }
     }
 }

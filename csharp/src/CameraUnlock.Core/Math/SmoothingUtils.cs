@@ -23,13 +23,13 @@ namespace CameraUnlock.Core.Math
         private const float SmoothingSpeedMax = 50f;
         private const float SmoothingSpeedMin = 0.1f;
         private const float SmoothingSpeedRange = SmoothingSpeedMax - SmoothingSpeedMin;
-        private const float SmoothingThreshold = 0.001f;
-
         /// <summary>
         /// Calculates the smoothing interpolation factor for the current frame.
         /// Uses frame-rate independent exponential smoothing.
+        /// At smoothing=0, smoothingSpeed=50 gives ultra-responsive but never instant
+        /// interpolation, eliminating micro-jumps between tracker samples at high refresh rates.
         /// </summary>
-        /// <param name="smoothing">Smoothing factor 0-1. 0=instant, 1=very slow.</param>
+        /// <param name="smoothing">Smoothing factor 0-1. 0=minimal smoothing, 1=very slow.</param>
         /// <param name="deltaTime">Time since last frame in seconds.</param>
         /// <returns>Interpolation factor to use with Lerp/Slerp.</returns>
 #if !NET35 && !NET40
@@ -37,11 +37,6 @@ namespace CameraUnlock.Core.Math
 #endif
         public static float CalculateSmoothingFactor(float smoothing, float deltaTime)
         {
-            if (smoothing < SmoothingThreshold)
-            {
-                return 1f;
-            }
-
             // Optimized: avoid Lerp call, direct calculation
             float smoothingSpeed = SmoothingSpeedMax - SmoothingSpeedRange * smoothing;
             return 1f - (float)System.Math.Exp(-smoothingSpeed * deltaTime);
