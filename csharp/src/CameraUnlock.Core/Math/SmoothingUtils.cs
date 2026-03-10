@@ -8,7 +8,16 @@ namespace CameraUnlock.Core.Math
 {
     /// <summary>
     /// Frame-rate independent exponential smoothing utilities.
-    /// Performance-critical methods are aggressively inlined on supported frameworks.
+    /// <para>
+    /// Two distinct concerns are handled by the same exponential SLERP/lerp:
+    /// <list type="bullet">
+    /// <item><b>Frame interpolation (always on)</b>: Ensures smooth output at any display
+    /// refresh rate. Even at smoothing=0, the output is interpolated between tracker samples
+    /// so that e.g. 30Hz tracker data looks smooth on a 240Hz display. Speed = <see cref="FrameInterpolationSpeed"/>.</item>
+    /// <item><b>User smoothing (configurable)</b>: Reduces jitter/noise at the cost of added
+    /// latency. Controlled by the smoothing parameter (0 = frame interpolation only, 1 = heavy smoothing).</item>
+    /// </list>
+    /// </para>
     /// </summary>
     public static class SmoothingUtils
     {
@@ -19,27 +28,37 @@ namespace CameraUnlock.Core.Math
         /// </summary>
         public const float RemoteConnectionBaseline = 0.15f;
 
-        // Pre-computed constants to avoid repeated calculation
-        private const float SmoothingSpeedMax = 50f;
-        private const float SmoothingSpeedMin = 0.1f;
-        private const float SmoothingSpeedRange = SmoothingSpeedMax - SmoothingSpeedMin;
+        /// <summary>
+        /// Maximum interpolation speed (used at smoothing=0). This is the frame interpolation
+        /// floor: fast enough to be responsive, slow enough to hide discrete tracker sample
+        /// boundaries at high refresh rates.
+        /// At 240Hz: t ≈ 0.34/frame, settles to 95% in ~30ms (~10ms average lag).
+        /// At 60Hz:  t ≈ 0.81/frame, settles to 95% in ~30ms (~10ms average lag).
+        /// </summary>
+        public const float FrameInterpolationSpeed = 100f;
+
+        // Minimum speed at maximum user smoothing (smoothing=1). ~5 second settling time.
+        private const float MaxSmoothing = 0.1f;
+        private const float SpeedRange = FrameInterpolationSpeed - MaxSmoothing;
+
         /// <summary>
         /// Calculates the smoothing interpolation factor for the current frame.
-        /// Uses frame-rate independent exponential smoothing.
-        /// At smoothing=0, smoothingSpeed=50 gives ultra-responsive but never instant
-        /// interpolation, eliminating micro-jumps between tracker samples at high refresh rates.
+        /// Uses frame-rate independent exponential smoothing: t = 1 - exp(-speed * dt).
+        /// The speed is always clamped to [<see cref="MaxSmoothing"/>, <see cref="FrameInterpolationSpeed"/>],
+        /// guaranteeing frame interpolation regardless of the smoothing input value.
         /// </summary>
-        /// <param name="smoothing">Smoothing factor 0-1. 0=minimal smoothing, 1=very slow.</param>
+        /// <param name="smoothing">Smoothing factor 0-1. 0 = frame interpolation only, 1 = heavy smoothing.</param>
         /// <param name="deltaTime">Time since last frame in seconds.</param>
-        /// <returns>Interpolation factor to use with Lerp/Slerp.</returns>
+        /// <returns>Interpolation factor to use with Lerp/Slerp (always in (0, 1)).</returns>
 #if !NET35 && !NET40
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
 #endif
         public static float CalculateSmoothingFactor(float smoothing, float deltaTime)
         {
-            // Optimized: avoid Lerp call, direct calculation
-            float smoothingSpeed = SmoothingSpeedMax - SmoothingSpeedRange * smoothing;
-            return 1f - (float)System.Math.Exp(-smoothingSpeed * deltaTime);
+            float speed = FrameInterpolationSpeed - SpeedRange * smoothing;
+            if (speed > FrameInterpolationSpeed) speed = FrameInterpolationSpeed;
+            if (speed < MaxSmoothing) speed = MaxSmoothing;
+            return 1f - (float)System.Math.Exp(-speed * deltaTime);
         }
 
         /// <summary>

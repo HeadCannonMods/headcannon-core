@@ -26,7 +26,8 @@ namespace CameraUnlock.Core.Processing
         public DeadzoneSettings Deadzone { get; set; } = DeadzoneSettings.None;
 
         /// <summary>
-        /// Smoothing factor (0 = instant, 1 = very slow).
+        /// User smoothing factor (0 = frame interpolation only, 1 = heavy smoothing).
+        /// Frame interpolation is always applied regardless of this value.
         /// </summary>
         public float SmoothingFactor { get; set; } = 0f;
 

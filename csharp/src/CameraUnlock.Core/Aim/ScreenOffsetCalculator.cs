@@ -38,18 +38,35 @@ namespace CameraUnlock.Core.Aim
             float halfWidth = screenWidth * 0.5f;
             float halfHeight = screenHeight * 0.5f;
 
-            // Calculate tangent of half FOV angles
             float tanHalfFovX = (float)System.Math.Tan(horizontalFov * MathConstants.DegToRad * 0.5f);
             float tanHalfFovY = (float)System.Math.Tan(verticalFov * MathConstants.DegToRad * 0.5f);
 
-            // Calculate screen offset using tangent projection
-            // Negative yaw because head turn right should move crosshair left
-            offsetX = -(float)System.Math.Tan(yawDegrees * MathConstants.DegToRad) / tanHalfFovX * halfWidth * compensationScale;
-            offsetY = (float)System.Math.Tan(pitchDegrees * MathConstants.DegToRad) / tanHalfFovY * halfHeight * compensationScale;
+            // Exact spherical coordinate projection matching camera rotation.
+            // Original aim direction decomposed into tracked camera basis:
+            //   right   = -sin(yaw)
+            //   up      = sin(pitch) * cos(yaw)
+            //   forward = cos(pitch) * cos(yaw)
+            // The key correction vs independent tangent projection is the 1/cos(pitch)
+            // factor on the x term, which prevents "orbiting" when both yaw and pitch are non-zero.
+            float yawRad = yawDegrees * MathConstants.DegToRad;
+            float pitchRad = pitchDegrees * MathConstants.DegToRad;
 
-            // Apply roll as 2D screen-space rotation
-            // This prevents cross-axis contamination that occurs with 3D roll application
-            ApplyRollRotation(offsetX, offsetY, rollDegrees, out offsetX, out offsetY);
+            float sinY = (float)System.Math.Sin(yawRad);
+            float cosY = (float)System.Math.Cos(yawRad);
+            float sinP = (float)System.Math.Sin(pitchRad);
+            float cosP = (float)System.Math.Cos(pitchRad);
+
+            float ax = -sinY;
+            float ay = sinP * cosY;
+            float az = cosP * cosY;
+
+            // Apply roll in direction space (before perspective divide) to avoid
+            // elliptical distortion from different horizontal/vertical FOV scales.
+            ApplyRollRotation(ax, ay, rollDegrees, out ax, out ay);
+
+            // Perspective divide and FOV scaling
+            offsetX = (ax / az) / tanHalfFovX * halfWidth * compensationScale;
+            offsetY = (ay / az) / tanHalfFovY * halfHeight * compensationScale;
         }
 
 #if NETSTANDARD2_0
@@ -113,10 +130,22 @@ namespace CameraUnlock.Core.Aim
             out float offsetX,
             out float offsetY)
         {
-            offsetX = -(float)System.Math.Tan(yawDegrees * MathConstants.DegToRad) / tanHalfFovX * halfWidth * compensationScale;
-            offsetY = (float)System.Math.Tan(pitchDegrees * MathConstants.DegToRad) / tanHalfFovY * halfHeight * compensationScale;
+            float yawRad = yawDegrees * MathConstants.DegToRad;
+            float pitchRad = pitchDegrees * MathConstants.DegToRad;
 
-            ApplyRollRotation(offsetX, offsetY, rollDegrees, out offsetX, out offsetY);
+            float sinY = (float)System.Math.Sin(yawRad);
+            float cosY = (float)System.Math.Cos(yawRad);
+            float sinP = (float)System.Math.Sin(pitchRad);
+            float cosP = (float)System.Math.Cos(pitchRad);
+
+            float ax = -sinY;
+            float ay = sinP * cosY;
+            float az = cosP * cosY;
+
+            ApplyRollRotation(ax, ay, rollDegrees, out ax, out ay);
+
+            offsetX = (ax / az) / tanHalfFovX * halfWidth * compensationScale;
+            offsetY = (ay / az) / tanHalfFovY * halfHeight * compensationScale;
         }
 
         /// <summary>

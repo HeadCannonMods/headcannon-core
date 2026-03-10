@@ -23,7 +23,7 @@ namespace CameraUnlock.Core.Data
         /// <summary>Maximum Z displacement in meters.</summary>
         public float LimitZ { get; }
 
-        /// <summary>Smoothing factor (0 = instant, 1 = very slow).</summary>
+        /// <summary>User smoothing factor (0 = frame interpolation only, 1 = heavy smoothing).</summary>
         public float Smoothing { get; }
 
         /// <summary>Invert X axis.</summary>

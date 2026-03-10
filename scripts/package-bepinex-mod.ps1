@@ -18,6 +18,8 @@
     Array of DLL filenames to include.
 .PARAMETER ProjectRoot
     Root directory of the mod project (default: cwd).
+.PARAMETER CreateNexusZip
+    When set, also creates a NexusMods-compatible ZIP with BepInEx/plugins/ structure (DLLs only).
 #>
 param(
     [Parameter(Mandatory=$true)]
@@ -32,7 +34,9 @@ param(
     [Parameter(Mandatory=$true)]
     [string[]]$ModDlls,
 
-    [string]$ProjectRoot = $PWD
+    [string]$ProjectRoot = $PWD,
+
+    [switch]$CreateNexusZip
 )
 
 Set-StrictMode -Version Latest
@@ -131,10 +135,59 @@ Remove-Item -Recurse -Force $stagingDir
 
 $zipSize = (Get-Item $zipPath).Length / 1KB
 Write-Host ""
-Write-Host "=== Package Complete ===" -ForegroundColor Magenta
+Write-Host "=== GitHub Package Complete ===" -ForegroundColor Magenta
 Write-Host ""
 Write-Host "Release archive: $zipPath" -ForegroundColor Green
 Write-Host ("Size: {0:N1} KB" -f $zipSize) -ForegroundColor White
 
 # Output zip path for CI capture
 Write-Output $zipPath
+
+if ($CreateNexusZip) {
+    Write-Host ""
+    Write-Host "=== Creating NexusMods ZIP ===" -ForegroundColor Magenta
+    Write-Host ""
+
+    $nexusStagingDir = Join-Path $releaseDir "staging-nexus"
+    if (Test-Path $nexusStagingDir) {
+        Remove-Item -Recurse -Force $nexusStagingDir
+    }
+
+    $nexusPluginsDir = Join-Path (Join-Path $nexusStagingDir "BepInEx") "plugins"
+    New-Item -ItemType Directory -Path $nexusPluginsDir -Force | Out-Null
+
+    foreach ($dll in $ModDlls) {
+        $dllPath = Join-Path $BuildOutputDir $dll
+        Copy-Item $dllPath -Destination $nexusPluginsDir -Force
+        Write-Host "  BepInEx/plugins/$dll" -ForegroundColor Green
+    }
+
+    $nexusZipName = "$ModName-v$version-nexus.zip"
+    $nexusZipPath = Join-Path $releaseDir $nexusZipName
+
+    if (Test-Path $nexusZipPath) {
+        Remove-Item $nexusZipPath -Force
+    }
+
+    Write-Host ""
+    Write-Host "Creating NexusMods ZIP archive..." -ForegroundColor Cyan
+
+    Push-Location $nexusStagingDir
+    try {
+        Compress-Archive -Path ".\*" -DestinationPath $nexusZipPath -Force
+    } finally {
+        Pop-Location
+    }
+
+    Remove-Item -Recurse -Force $nexusStagingDir
+
+    $nexusZipSize = (Get-Item $nexusZipPath).Length / 1KB
+    Write-Host ""
+    Write-Host "=== NexusMods Package Complete ===" -ForegroundColor Magenta
+    Write-Host ""
+    Write-Host "NexusMods archive: $nexusZipPath" -ForegroundColor Green
+    Write-Host ("Size: {0:N1} KB" -f $nexusZipSize) -ForegroundColor White
+
+    # Output nexus zip path for CI capture
+    Write-Output $nexusZipPath
+}

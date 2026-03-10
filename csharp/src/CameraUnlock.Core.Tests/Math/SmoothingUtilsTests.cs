@@ -74,6 +74,35 @@ namespace CameraUnlock.Core.Tests.Math
         }
 
         [Fact]
+        public void CalculateSmoothingFactor_NegativeSmoothing_ClampedToFrameInterpolationSpeed()
+        {
+            // Negative smoothing should not produce a faster speed than FrameInterpolationSpeed
+            float normal = SmoothingUtils.CalculateSmoothingFactor(0f, DeltaTime60Fps);
+            float negative = SmoothingUtils.CalculateSmoothingFactor(-1f, DeltaTime60Fps);
+            Assert.Equal(normal, negative);
+        }
+
+        [Fact]
+        public void CalculateSmoothingFactor_AboveOneSmoothing_ClampedToMinSpeed()
+        {
+            // Smoothing > 1 should not produce a negative or zero speed
+            float result = SmoothingUtils.CalculateSmoothingFactor(2f, DeltaTime60Fps);
+            Assert.InRange(result, 0.001f, 0.1f);
+        }
+
+        [Fact]
+        public void CalculateSmoothingFactor_AlwaysInterpolates_NeverReturnsOne()
+        {
+            // At any reasonable framerate, the factor should never reach 1.0
+            // (which would mean snap-to-target, no interpolation)
+            float at240Hz = SmoothingUtils.CalculateSmoothingFactor(0f, 1f / 240f);
+            float at60Hz = SmoothingUtils.CalculateSmoothingFactor(0f, 1f / 60f);
+            Assert.True(at240Hz < 1f, "Frame interpolation must always be active at 240Hz");
+            Assert.True(at60Hz < 1f, "Frame interpolation must always be active at 60Hz");
+            Assert.True(at240Hz > 0f, "Must produce non-zero blend at 240Hz");
+        }
+
+        [Fact]
         public void GetEffectiveSmoothing_LocalConnection_ReturnsBaseSmoothing()
         {
             float result = SmoothingUtils.GetEffectiveSmoothing(0.05f, false);

@@ -32,6 +32,11 @@ on:
         required: false
         type: string
         default: ""
+      create-nexus-zip:
+        description: "Create a NexusMods-compatible ZIP with BepInEx/plugins/ structure"
+        required: false
+        type: string
+        default: "false"
 
 jobs:
   release:
@@ -98,17 +103,31 @@ jobs:
         shell: pwsh
         run: |
           $dlls = "${{ inputs.mod-dlls }}" -split '\s+'
+          $createNexus = "${{ inputs.create-nexus-zip }}" -eq "true"
 
-          $output = & cameraunlock-core/scripts/package-bepinex-mod.ps1 `
-            -ModName "${{ inputs.mod-name }}" `
-            -CsprojPath "${{ inputs.csproj-path }}" `
-            -BuildOutputDir "${{ inputs.build-output-dir }}" `
-            -ModDlls $dlls
+          $params = @{
+            ModName = "${{ inputs.mod-name }}"
+            CsprojPath = "${{ inputs.csproj-path }}"
+            BuildOutputDir = "${{ inputs.build-output-dir }}"
+            ModDlls = $dlls
+          }
+          if ($createNexus) {
+            $params.CreateNexusZip = $true
+          }
 
-          # package-bepinex-mod.ps1 outputs the zip path as its last Write-Output
-          $zip = ($output | Select-Object -Last 1)
-          echo "zip_path=$zip" >> $env:GITHUB_OUTPUT
-          Write-Host "Package created: $zip" -ForegroundColor Green
+          $output = & cameraunlock-core/scripts/package-bepinex-mod.ps1 @params
+
+          # Script outputs github zip first, nexus zip second (if enabled)
+          $outputLines = @($output)
+          $githubZip = $outputLines[0]
+          echo "zip_path=$githubZip" >> $env:GITHUB_OUTPUT
+          Write-Host "GitHub package: $githubZip" -ForegroundColor Green
+
+          if ($createNexus -and $outputLines.Count -ge 2) {
+            $nexusZip = $outputLines[1]
+            echo "nexus_zip_path=$nexusZip" >> $env:GITHUB_OUTPUT
+            Write-Host "NexusMods package: $nexusZip" -ForegroundColor Green
+          }
 
       - name: Generate release notes
         shell: pwsh
@@ -127,13 +146,19 @@ jobs:
         run: |
           $tag = "${{ steps.version.outputs.tag }}"
           $zipPath = "${{ steps.package.outputs.zip_path }}"
+          $nexusZipPath = "${{ steps.package.outputs.nexus_zip_path }}"
+
+          $assets = @($zipPath)
+          if ($nexusZipPath) {
+            $assets += $nexusZipPath
+          }
 
           Write-Host "Creating GitHub Release for $tag..." -ForegroundColor Cyan
 
           gh release create $tag `
             --title "${{ inputs.project-name }} $tag" `
             --notes-file "release-notes.txt" `
-            $zipPath
+            @assets
 
           if ($LASTEXITCODE -ne 0) {
             Write-Host "::error::Failed to create GitHub release"

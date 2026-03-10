@@ -143,6 +143,51 @@ namespace CameraUnlock.Core.Tests.Aim
         }
 
         [Fact]
+        public void Calculate_CombinedYawPitch_XOffsetScalesByCosP()
+        {
+            // With pitch, the x offset should be larger by 1/cos(pitch) due to
+            // spherical coordinate projection (prevents reticle "orbiting").
+            ScreenOffsetCalculator.Calculate(
+                10f, 0f, 0f,
+                HorizontalFov, VerticalFov,
+                ScreenWidth, ScreenHeight,
+                CompensationScale,
+                out float xYawOnly, out _);
+
+            ScreenOffsetCalculator.Calculate(
+                10f, 30f, 0f,
+                HorizontalFov, VerticalFov,
+                ScreenWidth, ScreenHeight,
+                CompensationScale,
+                out float xCombined, out _);
+
+            float ratio = xCombined / xYawOnly;
+            float expectedRatio = 1f / (float)System.Math.Cos(30f * System.Math.PI / 180f);
+            Assert.Equal(expectedRatio, ratio, precision: 3);
+        }
+
+        [Fact]
+        public void Calculate_CombinedYawPitch_YOffsetUnaffectedByYaw()
+        {
+            // The y offset should be independent of yaw (cosY cancels in the projection).
+            ScreenOffsetCalculator.Calculate(
+                0f, 20f, 0f,
+                HorizontalFov, VerticalFov,
+                ScreenWidth, ScreenHeight,
+                CompensationScale,
+                out _, out float yPitchOnly);
+
+            ScreenOffsetCalculator.Calculate(
+                25f, 20f, 0f,
+                HorizontalFov, VerticalFov,
+                ScreenWidth, ScreenHeight,
+                CompensationScale,
+                out _, out float yCombined);
+
+            Assert.Equal(yPitchOnly, yCombined, precision: 3);
+        }
+
+        [Fact]
         public void Calculate_SymmetricAngles_ProduceSymmetricOffsets()
         {
             ScreenOffsetCalculator.Calculate(
