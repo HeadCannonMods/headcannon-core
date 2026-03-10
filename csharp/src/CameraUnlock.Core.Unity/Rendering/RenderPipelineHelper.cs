@@ -174,7 +174,11 @@ namespace CameraUnlock.Core.Unity.Rendering
         }
 
         /// <summary>
-        /// Registers SRP callbacks using reflection.
+        /// Registers SRP callbacks using reflection and IL-emitted wrapper delegates.
+        /// The SRP events have signature Action&lt;ScriptableRenderContext, Camera&gt; where
+        /// ScriptableRenderContext is a value type. We use DynamicMethod to emit wrappers
+        /// with the exact parameter types, avoiding the struct/object binding mismatch
+        /// that Delegate.CreateDelegate cannot handle.
         /// </summary>
         private static void RegisterSRPCallbacks(Action<Camera> onPreRender, Action<Camera> onPostRender)
         {
@@ -197,34 +201,23 @@ namespace CameraUnlock.Core.Unity.Rendering
                 throw new InvalidOperationException("SRP detected but beginCameraRendering/endCameraRendering events not found.");
             }
 
-            // Get the delegate type for the event (Action<ScriptableRenderContext, Camera>)
             var delegateType = beginEvent.EventHandlerType;
 
-            // Create a wrapper delegate that ignores the context and just calls our Action<Camera>
-            // The event handler signature is: (ScriptableRenderContext context, Camera camera)
-            // We create a dynamic method that ignores the first parameter
+            // Get the actual parameter types from the delegate's Invoke method.
+            // This gives us (ScriptableRenderContext, Camera) with the real struct type,
+            // which DynamicMethod needs to match for valid delegate binding.
+            var invokeParams = delegateType.GetMethod("Invoke").GetParameters();
+            var paramTypes = new Type[invokeParams.Length];
+            for (int i = 0; i < invokeParams.Length; i++)
+            {
+                paramTypes[i] = invokeParams[i].ParameterType;
+            }
 
-            var method = new System.Reflection.Emit.DynamicMethod(
-                "SRPPreRenderWrapper",
-                typeof(void),
-                new[] { typeof(object), typeof(Camera) },
-                typeof(RenderPipelineHelper).Module);
-
-            var il = method.GetILGenerator();
-            il.Emit(System.Reflection.Emit.OpCodes.Ldarg_1);
-            il.Emit(System.Reflection.Emit.OpCodes.Call, onPreRender.Method);
-            il.Emit(System.Reflection.Emit.OpCodes.Ret);
-
-            // This approach is complex - let's use a simpler wrapper class
-            // Actually, let's just create a lambda-compatible approach
-
-            // Simpler: store the Action<Camera> in a static field and use a static method as handler
             _storedPreRender = onPreRender;
             _storedPostRender = onPostRender;
 
-            // Create delegates using the SRP wrapper methods
-            _srpPreRenderDelegate = Delegate.CreateDelegate(delegateType, typeof(RenderPipelineHelper), "SRPPreRenderHandler");
-            _srpPostRenderDelegate = Delegate.CreateDelegate(delegateType, typeof(RenderPipelineHelper), "SRPPostRenderHandler");
+            _srpPreRenderDelegate = CreateSRPWrapperDelegate("SRPPreRenderWrapper", paramTypes, delegateType, "_storedPreRender");
+            _srpPostRenderDelegate = CreateSRPWrapperDelegate("SRPPostRenderWrapper", paramTypes, delegateType, "_storedPostRender");
 
             beginEvent.AddEventHandler(null, (Delegate)_srpPreRenderDelegate);
             endEvent.AddEventHandler(null, (Delegate)_srpPostRenderDelegate);
@@ -234,23 +227,30 @@ namespace CameraUnlock.Core.Unity.Rendering
         private static Action<Camera> _storedPreRender;
         private static Action<Camera> _storedPostRender;
 
-        // These methods are called via reflection by the SRP events
-        // Signature must match: void Handler(ScriptableRenderContext context, Camera camera)
-        // Since we can't reference ScriptableRenderContext, we use 'object'
-        private static void SRPPreRenderHandler(object context, Camera camera)
+        /// <summary>
+        /// Emits a DynamicMethod matching the SRP event signature (ScriptableRenderContext, Camera),
+        /// loads the stored Action&lt;Camera&gt; from the named static field, and invokes it with just the Camera.
+        /// </summary>
+        private static Delegate CreateSRPWrapperDelegate(string name, Type[] paramTypes, Type delegateType, string fieldName)
         {
-            if (_storedPreRender != null)
-            {
-                _storedPreRender(camera);
-            }
-        }
+            var dm = new System.Reflection.Emit.DynamicMethod(
+                name,
+                typeof(void),
+                paramTypes,
+                typeof(RenderPipelineHelper).Module,
+                true);
 
-        private static void SRPPostRenderHandler(object context, Camera camera)
-        {
-            if (_storedPostRender != null)
-            {
-                _storedPostRender(camera);
-            }
+            var field = typeof(RenderPipelineHelper).GetField(fieldName,
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            var invokeMethod = typeof(Action<Camera>).GetMethod("Invoke");
+
+            var il = dm.GetILGenerator();
+            il.Emit(System.Reflection.Emit.OpCodes.Ldsfld, field);
+            il.Emit(System.Reflection.Emit.OpCodes.Ldarg_1);
+            il.Emit(System.Reflection.Emit.OpCodes.Callvirt, invokeMethod);
+            il.Emit(System.Reflection.Emit.OpCodes.Ret);
+
+            return dm.CreateDelegate(delegateType);
         }
 
         /// <summary>

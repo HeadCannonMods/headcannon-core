@@ -25,7 +25,9 @@ public:
 
         if (is_new_sample) {
             if (m_hasAnySample) {
-                float sample_dt = m_timeSinceLastSample;
+                // Include current frame's delta — m_timeSinceLastSample only has
+                // stale-frame deltas accumulated so far, missing this frame.
+                float sample_dt = m_timeSinceLastSample + delta_time;
                 if (sample_dt > 0.0f) {
                     float inst_vel_x = (raw.x - m_lastX) / sample_dt;
                     float inst_vel_y = (raw.y - m_lastY) / sample_dt;
@@ -68,11 +70,12 @@ public:
         }
 
         // Decay factor: velocity influence fades as we get further from the last sample
+        // Uses 1/(1+r^2) — gentle near 0, only dampens near max extrapolation time.
+        // (The original 1/(1+r)^2 was too aggressive: lost 26.6% at one-frame gaps.)
         float decay = 1.0f;
         if (m_maxExtrapolationTime > 0.0f) {
             float ratio = extrap_time / m_maxExtrapolationTime;
-            float denom = 1.0f + ratio;
-            decay = 1.0f / (denom * denom);
+            decay = 1.0f / (1.0f + ratio * ratio);
         }
 
         float pred_x = m_lastX + m_velocityX * extrap_time * decay;
