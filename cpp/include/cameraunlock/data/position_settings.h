@@ -10,7 +10,7 @@ struct PositionSettings {
     float sensitivity_z = 1.0f;
     float limit_x = 0.15f;
     float limit_y = 0.10f;
-    float limit_z = 0.20f;
+    float limit_z = 0.10f;
     float smoothing = 0.15f;
     bool invert_x = false;
     bool invert_y = false;
@@ -28,7 +28,7 @@ struct PositionSettings {
         , invert_x(inv_x), invert_y(inv_y), invert_z(inv_z) {}
 
     static PositionSettings Default() {
-        return PositionSettings(1.0f, 1.0f, 1.0f, 0.15f, 0.10f, 0.20f, 0.15f);
+        return PositionSettings(1.0f, 1.0f, 1.0f, 0.15f, 0.10f, 0.10f, 0.15f);
     }
 };
 

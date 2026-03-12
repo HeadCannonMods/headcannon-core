@@ -35,10 +35,10 @@ namespace CameraUnlock.Core.Data
         /// <summary>Invert Z axis.</summary>
         public bool InvertZ { get; }
 
-        /// <summary>Default settings: sensitivity=1.0, limits=(0.15, 0.10, 0.20), smoothing=0.15.</summary>
+        /// <summary>Default settings: sensitivity=1.0, limits=(0.15, 0.10, 0.10), smoothing=0.15.</summary>
         public static PositionSettings Default => new PositionSettings(
             1.0f, 1.0f, 1.0f,
-            0.15f, 0.10f, 0.20f,
+            0.15f, 0.10f, 0.10f,
             0.15f,
             false, false, false
         );
