@@ -98,10 +98,12 @@ namespace CameraUnlock.Core.Processing
             Vec3 total = _smoothedPosition + neckOffset;
 
             // Step 5: Box clamp total position against limits
+            // Z uses asymmetric limits: positive Z = backward lean (restricted),
+            // negative Z = forward lean (generous)
             Vec3 clamped = new Vec3(
                 MathUtils.Clamp(total.X, -Settings.LimitX, Settings.LimitX),
                 MathUtils.Clamp(total.Y, -Settings.LimitY, Settings.LimitY),
-                MathUtils.Clamp(total.Z, -Settings.LimitZ, Settings.LimitZ)
+                MathUtils.Clamp(total.Z, -Settings.LimitZ, Settings.LimitZBack)
             );
 
             return clamped;

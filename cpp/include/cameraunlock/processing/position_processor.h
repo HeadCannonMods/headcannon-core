@@ -78,10 +78,12 @@ public:
         math::Vec3 total = m_smoothedPosition + neck_offset;
 
         // Step 5: Box clamp total position against limits
+        // Z uses asymmetric limits: positive Z = backward lean (restricted),
+        // negative Z = forward lean (generous)
         math::Vec3 clamped(
             math::Clamp(total.x, -m_settings.limit_x, m_settings.limit_x),
             math::Clamp(total.y, -m_settings.limit_y, m_settings.limit_y),
-            math::Clamp(total.z, -m_settings.limit_z, m_settings.limit_z)
+            math::Clamp(total.z, -m_settings.limit_z, m_settings.limit_z_back)
         );
 
         return clamped;

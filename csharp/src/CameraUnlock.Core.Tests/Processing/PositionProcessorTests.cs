@@ -47,7 +47,7 @@ namespace CameraUnlock.Core.Tests.Processing
         {
             var proc = new PositionProcessor
             {
-                Settings = new PositionSettings(1f, 1f, 1f, 1f, 1f, 1f, 0f),
+                Settings = new PositionSettings(1f, 1f, 1f, 1f, 1f, 1f, 1f, 0f),
                 NeckModelSettings = NeckModelSettings.Disabled
             };
 
@@ -67,7 +67,7 @@ namespace CameraUnlock.Core.Tests.Processing
         {
             var proc = new PositionProcessor
             {
-                Settings = new PositionSettings(2f, 0.5f, 1.5f, 1f, 1f, 1f, 0f),
+                Settings = new PositionSettings(2f, 0.5f, 1.5f, 1f, 1f, 1f, 1f, 0f),
                 NeckModelSettings = NeckModelSettings.Disabled
             };
 
@@ -83,7 +83,7 @@ namespace CameraUnlock.Core.Tests.Processing
         {
             var proc = new PositionProcessor
             {
-                Settings = new PositionSettings(1f, 1f, 1f, 1f, 1f, 1f, 0f, invertX: true, invertY: false, invertZ: true),
+                Settings = new PositionSettings(1f, 1f, 1f, 1f, 1f, 1f, 1f, 0f, invertX: true, invertY: false, invertZ: true),
                 NeckModelSettings = NeckModelSettings.Disabled
             };
 
@@ -99,7 +99,7 @@ namespace CameraUnlock.Core.Tests.Processing
         {
             var proc = new PositionProcessor
             {
-                Settings = new PositionSettings(1f, 1f, 1f, 0.05f, 0.03f, 0.08f, 0f),
+                Settings = new PositionSettings(1f, 1f, 1f, 0.05f, 0.03f, 0.08f, 0.08f, 0f),
                 NeckModelSettings = NeckModelSettings.Disabled
             };
 
@@ -116,7 +116,7 @@ namespace CameraUnlock.Core.Tests.Processing
         {
             var proc = new PositionProcessor
             {
-                Settings = new PositionSettings(1f, 1f, 1f, 0.10f, 0.10f, 0.10f, 0f),
+                Settings = new PositionSettings(1f, 1f, 1f, 0.10f, 0.10f, 0.10f, 0.10f, 0f),
                 NeckModelSettings = NeckModelSettings.Disabled
             };
 
@@ -133,7 +133,7 @@ namespace CameraUnlock.Core.Tests.Processing
         {
             var proc = new PositionProcessor
             {
-                Settings = new PositionSettings(1f, 1f, 1f, 1f, 1f, 1f, 0.5f),
+                Settings = new PositionSettings(1f, 1f, 1f, 1f, 1f, 1f, 1f, 0.5f),
                 NeckModelSettings = NeckModelSettings.Disabled
             };
 
@@ -155,7 +155,7 @@ namespace CameraUnlock.Core.Tests.Processing
         {
             var proc = new PositionProcessor
             {
-                Settings = new PositionSettings(1f, 1f, 1f, 1f, 1f, 1f, 0f),
+                Settings = new PositionSettings(1f, 1f, 1f, 1f, 1f, 1f, 1f, 0f),
                 NeckModelSettings = new NeckModelSettings(true, 0.10f, 0.08f)
             };
 
@@ -173,7 +173,7 @@ namespace CameraUnlock.Core.Tests.Processing
         {
             var proc = new PositionProcessor
             {
-                Settings = new PositionSettings(1f, 1f, 1f, 0.02f, 0.02f, 0.02f, 0f),
+                Settings = new PositionSettings(1f, 1f, 1f, 0.02f, 0.02f, 0.02f, 0.02f, 0f),
                 NeckModelSettings = new NeckModelSettings(true, 0.10f, 0.08f)
             };
 
@@ -195,7 +195,7 @@ namespace CameraUnlock.Core.Tests.Processing
         {
             var proc = new PositionProcessor
             {
-                Settings = new PositionSettings(1f, 1f, 1f, 1f, 1f, 1f, 0f),
+                Settings = new PositionSettings(1f, 1f, 1f, 1f, 1f, 1f, 1f, 0f),
                 NeckModelSettings = NeckModelSettings.Disabled
             };
 
@@ -216,7 +216,7 @@ namespace CameraUnlock.Core.Tests.Processing
         {
             var proc = new PositionProcessor
             {
-                Settings = new PositionSettings(1f, 1f, 1f, 1f, 1f, 1f, 0.5f),
+                Settings = new PositionSettings(1f, 1f, 1f, 1f, 1f, 1f, 1f, 0.5f),
                 NeckModelSettings = NeckModelSettings.Disabled
             };
 
