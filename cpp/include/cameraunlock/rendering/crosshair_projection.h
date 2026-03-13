@@ -116,8 +116,7 @@ inline ScreenPosition ProjectCrosshair(const CrosshairProjectionParams& params) 
         return result;
     }
 
-    // Perspective projection.
-    // Signs determined empirically to match the tracking pipeline conventions.
+    // Perspective projection: body aim direction in screen space.
     float normalizedX = bLeft / (bDepth * tanHalfHFov);
     float normalizedY = -bUp / (bDepth * tanHalfVFov);
 
