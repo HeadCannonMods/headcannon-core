@@ -104,6 +104,11 @@ if (-not $gamePath) {
 # Windows game installs) would need UTF-8 but we write with ASCII
 # to stay compatible with cmd.exe's legacy interpreter without BOM
 # tricks. Real paths under Steam/GOG/Epic are ASCII in practice.
+#
+# WriteAllBytes (single tight win32 call) instead of Out-File: the
+# `.cmd` extension trips Windows Defender's script-scan, which briefly
+# locks the freshly-created file. Out-File's longer write window
+# races with that scan and intermittently throws a sharing violation.
 $lines = @(
     "set `"GAME_PATH=$gamePath`""
     "set `"GAME_EXE=$exeLeaf`""
@@ -111,5 +116,5 @@ $lines = @(
     "set `"GAME_DISPLAY_NAME=$displayName`""
     "set `"ENV_VAR_NAME=$envVarName`""
 )
-$lines -join "`r`n" | Out-File -Encoding ASCII -FilePath $OutFile -NoNewline
+[System.IO.File]::WriteAllBytes($OutFile, [System.Text.Encoding]::ASCII.GetBytes($lines -join "`r`n"))
 exit 0
