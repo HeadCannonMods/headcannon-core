@@ -237,6 +237,13 @@
       "steam_folder": "Sons Of The Forest",
       "executable_relpath": "SonsOfTheForest.exe",
       "data_folder": "SonsOfTheForest_Data"
+    },
+    "assassins-creed-unity": {
+      "display_name": "Assassin's Creed Unity",
+      "env_var": "ASSASSINS_CREED_UNITY_PATH",
+      "steam_app_id": 289650,
+      "steam_folder": "Assassin's Creed Unity",
+      "executable_relpath": "ACU.exe"
     }
   }
 }

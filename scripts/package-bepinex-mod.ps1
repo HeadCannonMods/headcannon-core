@@ -94,6 +94,18 @@ foreach ($script in @("install.cmd", "uninstall.cmd")) {
 # Bundle that shim alongside them so the release ZIP is self-contained.
 Copy-SharedBundle -StagingDir $stagingDir
 
+# Bundle vendored BepInEx (zip + LICENSE + README.md) so install.cmd has no
+# GitHub dependency at install time. Mods opt out by not committing vendor/bepinex/.
+$vendorSrc = Join-Path $ProjectRoot "vendor\bepinex"
+if (Test-Path $vendorSrc) {
+    $vendorDest = Join-Path $stagingDir "vendor\bepinex"
+    New-Item -ItemType Directory -Path $vendorDest -Force | Out-Null
+    foreach ($vendorFile in (Get-ChildItem -Path $vendorSrc -File)) {
+        Copy-Item $vendorFile.FullName -Destination $vendorDest -Force
+        Write-Host "  vendor/bepinex/$($vendorFile.Name)" -ForegroundColor Green
+    }
+}
+
 # Copy mod DLLs to plugins subfolder
 $pluginsDestDir = Join-Path $stagingDir "plugins"
 New-Item -ItemType Directory -Path $pluginsDestDir -Force | Out-Null

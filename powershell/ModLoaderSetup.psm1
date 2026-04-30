@@ -932,10 +932,21 @@ function Invoke-FetchLatestLoader {
         throw "No upstream release matches Owner=$Owner Repo=$Repo VersionPrefix='$VersionPrefix' AllowPrerelease=$($AllowPrerelease.IsPresent)."
     }
 
-    $release = $matching | Select-Object -First 1
-    $asset = $release.assets | Where-Object { $_.name -match $AssetPattern } | Select-Object -First 1
+    # REFramework-nightly: each nightly publishes a per-game subset (RE2.zip,
+    # RE4.zip, ...) and may skip ours. Walk newest-to-oldest until we find one
+    # whose asset list matches AssetPattern.
+    $release = $null
+    $asset = $null
+    foreach ($candidate in $matching) {
+        $candidateAsset = $candidate.assets | Where-Object { $_.name -match $AssetPattern } | Select-Object -First 1
+        if ($candidateAsset) {
+            $release = $candidate
+            $asset = $candidateAsset
+            break
+        }
+    }
     if (-not $asset) {
-        throw "Release $($release.tag_name) has no asset matching regex '$AssetPattern'."
+        throw "No release in the matching set has an asset matching regex '$AssetPattern' (scanned $($matching.Count) releases)."
     }
 
     Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $OutputPath -UseBasicParsing -TimeoutSec $TimeoutSec -Headers $headers

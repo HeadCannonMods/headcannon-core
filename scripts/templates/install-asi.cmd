@@ -31,13 +31,35 @@ set "MOD_CONTROLS="
 :: to ASI_LOADER_NAME in EXE_DIR. Bump it via `pixi run update-deps`.
 :: --- END CONFIG BLOCK ---
 
+call :detect_yes_flag %*
 call :main %*
 set "_EC=%errorlevel%"
 if not defined YES_FLAG ( echo. & pause )
 exit /b %_EC%
 
+:: ============================================
+:: Pre-scan args at outer scope so YES_FLAG propagates to the post-:main
+:: pause check. :main's arg parser sets its own (local) YES_FLAG too, but
+:: cmd.exe discards local vars when setlocal pops on `exit /b`, so without
+:: this pre-scan the post-:main `if not defined YES_FLAG` always pauses
+:: and /y can't make the script headless. Square brackets are used (not
+:: quotes) to dodge cmd's path-with-trailing-backslash quoting hazard.
+:: ============================================
+:detect_yes_flag
+if [%1]==[] exit /b 0
+if /i [%~1]==[/y]    set "YES_FLAG=1"
+if /i [%~1]==[-y]    set "YES_FLAG=1"
+if /i [%~1]==[--yes] set "YES_FLAG=1"
+shift
+goto :detect_yes_flag
+
 :main
 setlocal enabledelayedexpansion
+
+:: Capture script dir BEFORE the arg parser runs. Inside `call :main`,
+:: `shift` rotates %0 too, so %~dp0 read after shifts resolves to the
+:: dirname of the first arg (e.g. C:\ for /y) instead of the script.
+set "SCRIPT_DIR=%~dp0"
 
 :: -------- Arg parser (canonical, do not modify) --------
 set "YES_FLAG="
@@ -61,8 +83,6 @@ exit /b 2
 echo.
 echo === %MOD_DISPLAY_NAME% - Install ===
 echo.
-
-set "SCRIPT_DIR=%~dp0"
 
 :: -------- Resolve game path via shared shim --------
 set "_SHIM=%SCRIPT_DIR%shared\find-game.ps1"
