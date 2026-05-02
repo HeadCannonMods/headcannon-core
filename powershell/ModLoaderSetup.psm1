@@ -1029,6 +1029,21 @@ function Refresh-VendoredLoader {
 
     if (-not $OutputFileName) { $OutputFileName = $meta.AssetName }
     $targetPath = Join-Path $OutputDir $OutputFileName
+    $readmePath = Join-Path $OutputDir 'README.md'
+    $licensePath = Join-Path $OutputDir 'LICENSE'
+
+    # Idempotency: if the on-disk vendor copy already matches the freshly-downloaded
+    # SHA-256, leave the tree alone. Otherwise every run dirties README.md with a new
+    # FetchedAt timestamp even when upstream is unchanged.
+    if ((Test-Path $targetPath) -and (Test-Path $readmePath) -and (Test-Path $licensePath)) {
+        $existingSha = (Get-FileHash -Path $targetPath -Algorithm SHA256).Hash.ToLower()
+        if ($existingSha -eq $meta.Sha256) {
+            Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
+            Write-Host "    no change (sha256=$($meta.Sha256.Substring(0,12))... matches on-disk vendor copy)" -ForegroundColor DarkGray
+            $meta.LocalPath = $targetPath
+            return $meta
+        }
+    }
 
     Move-Item -Path $tempFile -Destination $targetPath -Force
 
@@ -1036,7 +1051,6 @@ function Refresh-VendoredLoader {
     #   1. Explicit $LicenseUrl (e.g. LGPL mods or Thunderstore repacks that don't ship LICENSE).
     #   2. LICENSE extracted from the downloaded zip.
     #   3. GitHub API /repos/:owner/:repo/license as last resort.
-    $licensePath = Join-Path $OutputDir 'LICENSE'
     $extractedLicense = $false
 
     if ($LicenseUrl) {
@@ -1091,7 +1105,6 @@ function Refresh-VendoredLoader {
     }
 
     # README.md with metadata.
-    $readmePath = Join-Path $OutputDir 'README.md'
     $readme = @()
     $readme += "# $Name (vendored)"
     $readme += ''
