@@ -81,7 +81,7 @@ namespace CameraUnlock.Core.Tests.Processing
         }
 
         [Fact]
-        public void InterpolationHoldsAtTarget_WhenNoNewSample()
+        public void ExtrapolationIsBounded_WhenNoNewSample()
         {
             var interp = new PositionInterpolator();
 
@@ -102,7 +102,34 @@ namespace CameraUnlock.Core.Tests.Processing
                 lastX = r.X;
             }
 
-            // Should be exactly at pos2, not beyond it
+            // With MaxExtrapolationFraction=0.5 (default), output extrapolates
+            // half a sample period past the target, then caps:
+            // from + (to - from) * 1.5 = 0 + 0.1 * 1.5 = 0.15
+            Assert.Equal(0.15f, lastX, precision: 2);
+        }
+
+        [Fact]
+        public void NoExtrapolation_HoldsAtTarget()
+        {
+            var interp = new PositionInterpolator { MaxExtrapolationFraction = 0f };
+
+            var pos1 = MakePos(0f, 0f, 0f, 1000);
+            interp.Update(pos1, DeltaTime);
+            for (int i = 0; i < 3; i++)
+            {
+                interp.Update(pos1, DeltaTime);
+            }
+
+            var pos2 = MakePos(0.1f, 0f, 0f, 2000);
+            interp.Update(pos2, DeltaTime);
+
+            float lastX = 0f;
+            for (int i = 0; i < 100; i++)
+            {
+                var r = interp.Update(pos2, DeltaTime);
+                lastX = r.X;
+            }
+
             Assert.Equal(0.1f, lastX, precision: 3);
         }
 
