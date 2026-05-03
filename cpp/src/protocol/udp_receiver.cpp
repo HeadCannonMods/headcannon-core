@@ -2,8 +2,13 @@
 #include "cameraunlock/protocol/opentrack_packet.h"
 #include "cameraunlock/data/position_data.h"
 #include <chrono>
+#include <string>
 
 namespace cameraunlock {
+
+namespace {
+constexpr int kRetrySleepIncrementMs = 100;
+}
 
 UdpReceiver::~UdpReceiver() {
     Stop();
@@ -13,36 +18,99 @@ bool UdpReceiver::Start(uint16_t port) {
     if (m_running.load(std::memory_order_acquire)) {
         return true;
     }
-
-    m_failed = false;
-
-    if (!m_socket.Open(port)) {
-        m_failed = true;
+    if (m_retrying.load(std::memory_order_acquire)) {
         return false;
     }
 
-    // Start receiver thread
-    m_stopFlag.store(false, std::memory_order_release);
-    m_running.store(true, std::memory_order_release);
-    m_thread = std::thread(&UdpReceiver::ReceiverThread, this);
+    m_failed.store(false, std::memory_order_release);
+    m_port = port;
 
+    if (!m_socket.Open(port)) {
+        m_failed.store(true, std::memory_order_release);
+        if (m_log) {
+            m_log("Failed to bind UDP port " + std::to_string(port) +
+                  " -- will retry every " + std::to_string(kRetryIntervalMs / 1000) + "s");
+        }
+        StartRetryLoop();
+        return false;
+    }
+
+    StartReceiverThread();
     return true;
 }
 
+void UdpReceiver::StartRetryLoop() {
+    m_retrying.store(true, std::memory_order_release);
+    m_retryThread = std::thread(&UdpReceiver::RetryThread, this);
+}
+
+void UdpReceiver::RetryThread() {
+    const int sleepIncrements = kRetryIntervalMs / kRetrySleepIncrementMs;
+    const int attemptsPerLog = kRetryLogIntervalMs / kRetryIntervalMs;
+    int attempts = 0;
+
+    while (m_retrying.load(std::memory_order_acquire)) {
+        // Sleep in short increments so Stop() can interrupt quickly.
+        for (int i = 0; i < sleepIncrements; ++i) {
+            if (!m_retrying.load(std::memory_order_acquire)) return;
+            std::this_thread::sleep_for(std::chrono::milliseconds(kRetrySleepIncrementMs));
+        }
+        if (!m_retrying.load(std::memory_order_acquire)) return;
+
+        attempts++;
+
+        if (m_socket.Open(m_port)) {
+            if (!m_retrying.load(std::memory_order_acquire)) {
+                m_socket.Close();
+                return;
+            }
+
+            m_failed.store(false, std::memory_order_release);
+            m_retrying.store(false, std::memory_order_release);
+
+            // Stop() blocks on this thread's join, so spinning up the receive
+            // thread here is safe -- a concurrent Stop() will see the post-join
+            // m_running and tear it down through the normal path.
+            StartReceiverThread();
+
+            if (m_log) {
+                m_log("Bound UDP port " + std::to_string(m_port) +
+                      " after " + std::to_string(attempts) + " retries");
+            }
+            return;
+        }
+
+        if (attempts % attemptsPerLog == 0 && m_log) {
+            int elapsedSec = attempts * kRetryIntervalMs / 1000;
+            m_log("Still waiting for UDP port " + std::to_string(m_port) +
+                  " (" + std::to_string(elapsedSec) + "s elapsed)");
+        }
+    }
+}
+
+void UdpReceiver::StartReceiverThread() {
+    m_stopFlag.store(false, std::memory_order_release);
+    m_running.store(true, std::memory_order_release);
+    m_thread = std::thread(&UdpReceiver::ReceiverThread, this);
+}
+
 void UdpReceiver::Stop() {
-    if (!m_running.load(std::memory_order_acquire)) {
-        return;
+    m_retrying.store(false, std::memory_order_release);
+    if (m_retryThread.joinable()) {
+        m_retryThread.join();
     }
 
-    m_stopFlag.store(true, std::memory_order_release);
-
-    if (m_thread.joinable()) {
-        m_thread.join();
+    if (m_running.load(std::memory_order_acquire)) {
+        m_stopFlag.store(true, std::memory_order_release);
+        if (m_thread.joinable()) {
+            m_thread.join();
+        }
+        m_running.store(false, std::memory_order_release);
     }
 
     m_socket.Close();
 
-    m_running.store(false, std::memory_order_release);
+    m_failed.store(false, std::memory_order_release);
     m_trackingData.Reset();
     m_yawOffset.store(0.0f, std::memory_order_relaxed);
     m_pitchOffset.store(0.0f, std::memory_order_relaxed);

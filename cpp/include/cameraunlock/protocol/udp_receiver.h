@@ -1,6 +1,8 @@
 #pragma once
 
 #include <atomic>
+#include <functional>
+#include <string>
 #include <thread>
 #include <cstdint>
 #include "cameraunlock/data/tracking_pose.h"
@@ -21,6 +23,12 @@ public:
     /// checks more frequently and can detect disconnects sooner.
     static constexpr int kConnectionTimeoutMs = 500;
 
+    /// Interval between bind retries when the port is held by another process.
+    static constexpr int kRetryIntervalMs = 5000;
+
+    /// Interval between "still waiting" retry log messages.
+    static constexpr int kRetryLogIntervalMs = 30000;
+
     UdpReceiver() = default;
     ~UdpReceiver();
 
@@ -29,14 +37,27 @@ public:
     UdpReceiver& operator=(const UdpReceiver&) = delete;
 
     /// Starts the UDP receiver on the specified port.
-    /// @return True if started successfully.
+    /// If the port is already in use, schedules a background retry every
+    /// kRetryIntervalMs and returns false. The retry thread takes over without
+    /// further action from the caller; once it binds successfully the receive
+    /// thread starts and IsRunning becomes true.
+    /// @return True if bound and the receive thread started immediately.
     bool Start(uint16_t port = kDefaultPort);
 
-    /// Stops the UDP receiver.
+    /// Stops the UDP receiver. Cancels any pending retry, joins both threads,
+    /// closes the socket, and clears tracking state.
     void Stop();
 
-    /// True if the receiver is running.
+    /// Optional logging callback for bind failures and retry messages.
+    /// Must be thread-safe: invoked from Start (caller thread) and from the
+    /// background retry thread.
+    void SetLog(std::function<void(const std::string&)> log) { m_log = std::move(log); }
+
+    /// True if the receive thread is running.
     bool IsRunning() const { return m_running.load(std::memory_order_acquire); }
+
+    /// True if a background retry is in progress (port currently unavailable).
+    bool IsRetrying() const { return m_retrying.load(std::memory_order_acquire); }
 
     /// True if data has been received recently.
     bool IsReceiving() const;
@@ -44,8 +65,8 @@ public:
     /// True if the data source is from a remote address.
     bool IsRemoteConnection() const { return m_isRemoteConnection.load(std::memory_order_relaxed); }
 
-    /// True if initialization failed.
-    bool IsFailed() const { return m_failed; }
+    /// True if the most recent bind attempt failed. Cleared once retry succeeds.
+    bool IsFailed() const { return m_failed.load(std::memory_order_acquire); }
 
     /// Timestamp of the last received packet (microseconds since epoch).
     /// Compare across frames to detect new samples for interpolation.
@@ -64,12 +85,19 @@ public:
 
 private:
     void ReceiverThread();
+    void RetryThread();
+    void StartRetryLoop();
+    void StartReceiverThread();
 
     UdpSocket m_socket;
     std::thread m_thread;
+    std::thread m_retryThread;
     std::atomic<bool> m_running{false};
     std::atomic<bool> m_stopFlag{false};
-    bool m_failed = false;
+    std::atomic<bool> m_retrying{false};
+    std::atomic<bool> m_failed{false};
+    uint16_t m_port{kDefaultPort};
+    std::function<void(const std::string&)> m_log;
 
     // Thread-safe tracking data
     TrackingData m_trackingData;
