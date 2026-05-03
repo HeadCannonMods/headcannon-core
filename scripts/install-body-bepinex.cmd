@@ -128,21 +128,48 @@ if exist "%GAME_PATH%\%STATE_FILE%" (
 )
 
 :: -------- Ensure BepInEx --------
-if not exist "%GAME_PATH%\BepInEx\core\BepInEx.dll" (
-    echo BepInEx not found. Installing...
-    echo.
-    call :install_bepinex
-    if errorlevel 1 exit /b 1
-    set "WE_INSTALLED=true"
-    echo.
-    if defined YES_FLAG (
-        echo BepInEx installed. It will initialize on first game launch.
-    ) else (
-        call :prompt_bepinex_init
-    )
-) else (
-    echo Existing BepInEx detected, skipping loader install, deploying plugin only.
+:: Loader-presence check is BepInEx/core/BepInEx.dll. If it's there, also
+:: arch-check the loader proxy (winhttp.dll) against BEPINEX_ARCH before
+:: trusting it - other mod managers (TMM/r2modman) drop the generic x64
+:: BepInExPack into x86 Unity 2017 games, which silently prevents the
+:: loader from injecting (32-bit process can't load 64-bit DLL). Without
+:: this gate we deploy plugins onto a dead loader and the game launches
+:: vanilla.
+set "_LOADER_BAD="
+if exist "%GAME_PATH%\BepInEx\core\BepInEx.dll" (
+    call :verify_loader_arch
+    if errorlevel 1 set "_LOADER_BAD=1"
 )
+
+if not exist "%GAME_PATH%\BepInEx\core\BepInEx.dll" goto :install_loader
+if defined _LOADER_BAD goto :replace_loader
+echo Existing BepInEx detected, skipping loader install, deploying plugin only.
+goto :after_loader
+
+:replace_loader
+echo Existing BepInEx is the wrong architecture for this game ^(expected %BEPINEX_ARCH%^).
+echo This usually means another mod manager ^(Thunderstore Mod Manager,
+echo r2modman, ...^) installed the wrong BepInExPack first.
+echo Replacing it with the matching %BEPINEX_ARCH% loader...
+call :wipe_existing_bepinex
+goto :do_install_loader
+
+:install_loader
+echo BepInEx not found. Installing...
+
+:do_install_loader
+echo.
+call :install_bepinex
+if errorlevel 1 exit /b 1
+set "WE_INSTALLED=true"
+echo.
+if defined YES_FLAG (
+    echo BepInEx installed. It will initialize on first game launch.
+) else (
+    call :prompt_bepinex_init
+)
+
+:after_loader
 echo.
 
 :: -------- Deploy mod files --------
@@ -215,6 +242,41 @@ set /p "_CONFIRM=Type install to continue: "
 if /i not "!_CONFIRM!"=="install" goto :bepinex_gate
 echo.
 color
+exit /b 0
+
+:: ============================================
+:: Verify the existing loader proxy (winhttp.dll) matches BEPINEX_ARCH.
+:: Returns:
+::   0 - arch matches, existing loader is trustworthy
+::   1 - winhttp.dll missing OR wrong arch OR not a valid PE - caller
+::       should wipe + reinstall
+:: ============================================
+:verify_loader_arch
+:: BepInEx.dll without winhttp.dll = broken loader stack regardless of arch.
+if not exist "%GAME_PATH%\winhttp.dll" exit /b 1
+set "_ARCH_SHIM=%SCRIPT_DIR%shared\check-loader-arch.ps1"
+if not exist "%_ARCH_SHIM%" set "_ARCH_SHIM=%SCRIPT_DIR%..\cameraunlock-core\scripts\check-loader-arch.ps1"
+if not exist "%_ARCH_SHIM%" (
+    echo   ERROR: check-loader-arch.ps1 not found in shared\ or ..\cameraunlock-core\scripts\.
+    echo   If this is a release ZIP, re-download it from GitHub ^(corrupt installer^).
+    echo   If this is the dev tree, make sure the cameraunlock-core submodule is checked out.
+    exit /b 1
+)
+powershell -NoProfile -ExecutionPolicy Bypass -File "%_ARCH_SHIM%" -Path "%GAME_PATH%\winhttp.dll" -ExpectedArch %BEPINEX_ARCH%
+exit /b %errorlevel%
+
+:: ============================================
+:: Wipe an existing wrong-arch BepInEx loader so :install_bepinex can
+:: lay down our matching one. Removes the same set of files uninstall-
+:: body.cmd would for a BepInEx framework type.
+:: ============================================
+:wipe_existing_bepinex
+echo   Removing wrong-arch BepInEx files...
+if exist "%GAME_PATH%\BepInEx" rmdir /s /q "%GAME_PATH%\BepInEx"
+if exist "%GAME_PATH%\winhttp.dll" del /f /q "%GAME_PATH%\winhttp.dll"
+if exist "%GAME_PATH%\doorstop_config.ini" del /f /q "%GAME_PATH%\doorstop_config.ini"
+if exist "%GAME_PATH%\.doorstop_version" del /f /q "%GAME_PATH%\.doorstop_version"
+if exist "%GAME_PATH%\changelog.txt" del /f /q "%GAME_PATH%\changelog.txt"
 exit /b 0
 
 :: ============================================
