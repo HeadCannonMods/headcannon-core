@@ -27,6 +27,19 @@ namespace CameraUnlock.Core.Config
         /// <inheritdoc />
         public string ToggleKeyName { get; set; } = "End";
 
+        /// <summary>
+        /// Key name for toggling world-space vs camera-local yaw (e.g., "PageDown").
+        /// Framework-specific code parses this into the appropriate key code type.
+        /// </summary>
+        public string YawModeKeyName { get; set; } = "PageDown";
+
+        /// <summary>
+        /// Yaw mode at startup. true = horizon-locked yaw (rotates around world up
+        /// regardless of pitch). false = camera-local yaw (rotates around the camera's
+        /// current up axis, producing leaning/rolling at extreme pitches).
+        /// </summary>
+        public bool WorldSpaceYaw { get; set; } = true;
+
         /// <inheritdoc />
         public bool AimDecouplingEnabled { get; set; } = true;
 
@@ -159,6 +172,16 @@ namespace CameraUnlock.Core.Config
 
                     case "togglekey":
                         ToggleKeyName = value;
+                        break;
+
+                    case "yawmodekey":
+                        YawModeKeyName = value;
+                        break;
+
+                    case "worldspaceyaw":
+                    case "horizonlockedyaw":
+                        if (ConfigParsingUtils.TryParseBool(value, out boolVal))
+                            WorldSpaceYaw = boolVal;
                         break;
 
                     case "aimdecoupling":
