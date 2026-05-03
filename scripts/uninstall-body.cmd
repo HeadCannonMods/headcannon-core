@@ -1,14 +1,11 @@
 @echo off
 :: ============================================
-:: CameraUnlock Uninstall Template (Unified)
+:: CameraUnlock unified uninstall body (shared)
 :: ============================================
-:: Source of truth: cameraunlock-core/scripts/templates/uninstall.cmd.
-:: Copy to <mod>/scripts/uninstall.cmd, edit CONFIG BLOCK, leave the rest
-:: alone. Contract: see ~/.claude/CLAUDE.md "install.cmd / uninstall.cmd
-:: - Unified Launcher Contract".
-::
-:: One template, all loader variants. Dispatch is by FRAMEWORK_TYPE which
-:: MUST match what install.cmd wrote to the state file. Supported values:
+:: Source of truth: cameraunlock-core/scripts/uninstall-body.cmd.
+:: One body, all loader variants. Per-mod uninstall.cmd wrappers set the
+:: CONFIG BLOCK + WRAPPER_DIR and `call` here. Dispatch is by FRAMEWORK_TYPE
+:: which MUST match what install wrote to the state file. Supported values:
 ::
 ::   BepInEx      - removes <game>/BepInEx/, winhttp.dll, doorstop files
 ::   MelonLoader  - removes <game>/MelonLoader/, version.dll, dobby.dll
@@ -17,30 +14,25 @@
 ::   REFramework  - removes <game>/dinput8.dll and <game>/reframework/
 ::   None         - shim-only; restores shim DLLs from .backup if present
 ::
-:: Launcher CLI: uninstall.cmd [GAME_PATH] [/y] [/force]
+:: Required env from the wrapper:
+::   WRAPPER_DIR        - wrapper's %~dp0 (release-zip root or <mod>/scripts/)
+::   GAME_ID            - games.json id (find-game lookup)
+::   MOD_DISPLAY_NAME   - banner / status text
+::   MOD_DLLS           - space-separated DLL filenames to remove
+::   MOD_INTERNAL_NAME  - state-file `mod.name` (informational)
+::   STATE_FILE         - state file basename
+::   FRAMEWORK_TYPE     - dispatch key (see list above)
+::   LEGACY_DLLS        - optional extra DLLs from older versions to clean up
+::   MANAGED_SUBFOLDER  - MonoCecil only: path under GAME_PATH containing
+::                        Assembly-CSharp.dll
+::   ASSEMBLY_DLL       - MonoCecil only: assembly to restore from .original
+::   MANAGED_EXTRAS     - MonoCecil only: extra files (configs, logs) to wipe
+::   ASI_LOADER_NAME    - ASILoader only: DLL filename (default winmm.dll)
+::
+:: Launcher CLI (passed through %*): [GAME_PATH] [/y] [/force]
 ::   /y      - non-interactive; skip every pause and prompt
 ::   /force  - remove loader even if state says installed_by_us=false
 :: ============================================
-
-:: --- CONFIG BLOCK ---
-set "GAME_ID=my-game-id"
-set "MOD_DISPLAY_NAME=My Mod Name"
-set "MOD_DLLS=MyMod.dll CameraUnlock.Core.dll CameraUnlock.Core.Unity.dll"
-set "MOD_INTERNAL_NAME=MyMod"
-set "STATE_FILE=.headtracking-state.json"
-set "FRAMEWORK_TYPE=BepInEx"
-set "LEGACY_DLLS="
-
-:: --- Loader-specific config (leave the ones that don't apply blank) ---
-:: MonoCecil: used to find + restore the original Assembly-CSharp.dll.
-set "MANAGED_SUBFOLDER="
-set "ASSEMBLY_DLL="
-:: MonoCecil: extra files to also remove from MANAGED_SUBFOLDER (config/log
-:: files left behind by the mod itself).
-set "MANAGED_EXTRAS="
-:: ASILoader: filename the ASI DLL was renamed to. Defaults to winmm.dll.
-set "ASI_LOADER_NAME=winmm.dll"
-:: --- END CONFIG BLOCK ---
 
 call :detect_yes_flag %*
 call :main %*
@@ -72,10 +64,9 @@ goto :detect_yes_flag
 :main
 setlocal enabledelayedexpansion
 
-:: Capture script dir BEFORE the arg parser runs. Inside `call :main`,
-:: `shift` rotates %0 too, so %~dp0 read after shifts resolves to the
-:: dirname of the first arg (e.g. C:\ for /y) instead of the script.
-set "SCRIPT_DIR=%~dp0"
+:: WRAPPER_DIR is the wrapper's %~dp0 (release-zip root or <mod>/scripts/).
+:: Resolved here as SCRIPT_DIR so the rest of the body reads naturally.
+if defined WRAPPER_DIR ( set "SCRIPT_DIR=%WRAPPER_DIR%" ) else ( set "SCRIPT_DIR=%~dp0" )
 
 :: -------- Arg parser (canonical, do not modify) --------
 set "YES_FLAG="
@@ -148,7 +139,7 @@ if errorlevel 1 exit /b 1
 if /i "%FRAMEWORK_TYPE%"=="None" (
     call :remove_shim_files
 ) else if /i "%FRAMEWORK_TYPE%"=="MonoCecil" (
-    :: Cecil: restore backup THEN remove our DLLs from Managed/.
+    rem Cecil: restore backup THEN remove our DLLs from Managed/.
     call :remove_MonoCecil
     call :remove_mod_files_plain
     call :remove_managed_extras

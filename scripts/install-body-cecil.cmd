@@ -1,33 +1,34 @@
 @echo off
 :: ============================================
-:: CameraUnlock Mono.Cecil Patcher Install Template
+:: CameraUnlock Mono.Cecil install body (shared)
 :: ============================================
-:: Source of truth: cameraunlock-core/scripts/templates/install-cecil.cmd.
-:: Copy to <mod>/scripts/install.cmd, edit CONFIG BLOCK, leave the rest
-:: alone. Contract: see ~/.claude/CLAUDE.md "install.cmd / uninstall.cmd".
+:: Source of truth: cameraunlock-core/scripts/install-body-cecil.cmd.
+:: This file is the install flow itself - per-mod install.cmd wrappers set
+:: the CONFIG BLOCK + WRAPPER_DIR and then `call` into here. There is no
+:: per-mod copy of this body; the wrapper resolves it from
+:: <wrapper_dir>/shared/install-body-cecil.cmd in release zips, or from
+:: <wrapper_dir>/../cameraunlock-core/scripts/install-body-cecil.cmd in
+:: the dev tree.
 ::
-:: Standalone Mono.Cecil patcher: no loader download, no external framework.
-:: Vendoring: Mono.Cecil.dll is bundled in plugins/ (it's just a copied DLL;
-:: no vendor/ tree needed because there's nothing to fetch from upstream).
-:: Patches <Managed>/Assembly-CSharp.dll in place and backs up the original
-:: to Assembly-CSharp.dll.original. Uninstall restores the backup.
+:: Required env from the wrapper:
+::   WRAPPER_DIR        - wrapper's %~dp0 (release-zip root in production,
+::                        <mod>/scripts/ in dev). Used to resolve mod/ and
+::                        shared/find-game.ps1 - both siblings of the
+::                        wrapper, NOT siblings of this body file.
+::   GAME_ID            - games.json id (find-game lookup)
+::   MOD_DISPLAY_NAME   - banner / status text
+::   MOD_DLLS           - space-separated DLL filenames to deploy
+::   MOD_INTERNAL_NAME  - state-file `mod.name`
+::   MOD_VERSION        - state-file `mod.version`
+::   STATE_FILE         - state file basename (e.g. .headtracking-state.json)
+::   FRAMEWORK_TYPE     - state-file `framework.type` (always "MonoCecil" here)
+::   MANAGED_SUBFOLDER  - relative path under GAME_PATH containing Assembly-CSharp.dll
+::   ASSEMBLY_DLL       - target assembly to patch (usually Assembly-CSharp.dll)
+::   PATCHER_FILE       - C# patcher source filename in mod/
+::   MOD_CONTROLS       - optional post-install help text (hotkeys etc.)
 ::
-:: Launcher CLI: install.cmd [GAME_PATH] [/y]
+:: Launcher CLI (passed through %*): [GAME_PATH] [/y]
 :: ============================================
-
-:: --- CONFIG BLOCK ---
-set "GAME_ID=my-game-id"
-set "MOD_DISPLAY_NAME=My Mod Name"
-set "MOD_DLLS=MyMod.dll CameraUnlock.Core.dll CameraUnlock.Core.Unity.dll Mono.Cecil.dll"
-set "MOD_INTERNAL_NAME=MyMod"
-set "MOD_VERSION=1.0.0"
-set "STATE_FILE=.headtracking-state.json"
-set "FRAMEWORK_TYPE=MonoCecil"
-set "MANAGED_SUBFOLDER=MyGame_Data\Managed"
-set "ASSEMBLY_DLL=Assembly-CSharp.dll"
-set "PATCHER_FILE=BootstrapPatcher.cs"
-set "MOD_CONTROLS="
-:: --- END CONFIG BLOCK ---
 
 call :detect_yes_flag %*
 call :main %*
@@ -59,10 +60,12 @@ goto :detect_yes_flag
 :main
 setlocal enabledelayedexpansion
 
-:: Capture script dir BEFORE the arg parser runs. Inside `call :main`,
-:: `shift` rotates %0 too, so %~dp0 read after shifts resolves to the
-:: dirname of the first arg (e.g. C:\ for /y) instead of the script.
-set "SCRIPT_DIR=%~dp0"
+:: WRAPPER_DIR is the wrapper's %~dp0 (release-zip root or <mod>/scripts/).
+:: Resolved here as SCRIPT_DIR so the rest of the body reads naturally.
+:: Fallback to the body's own %~dp0 only if the wrapper forgot to set it -
+:: that path won't find mod/ but at least the find-game shim still resolves
+:: via the dev fallback below.
+if defined WRAPPER_DIR ( set "SCRIPT_DIR=%WRAPPER_DIR%" ) else ( set "SCRIPT_DIR=%~dp0" )
 
 :: -------- Arg parser (canonical, do not modify) --------
 set "YES_FLAG="

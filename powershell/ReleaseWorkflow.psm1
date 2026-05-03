@@ -34,11 +34,34 @@ function Copy-SharedBundle {
         $CoreRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
     }
 
+    # install-body-* and uninstall-body are the per-strategy script bodies
+    # used by thin per-mod wrapper install.cmd / uninstall.cmd files. Every
+    # mod ships every body in shared/; the wrapper picks the one matching
+    # its FRAMEWORK_TYPE. Cheap (each body is ~10KB), and it means a mod
+    # changing strategy across versions doesn't require a release-tooling
+    # change. Bodies that haven't been ported from the templates/ shape
+    # yet are skipped silently when missing - the mod is still on the old
+    # in-tree copy and doesn't need them.
     $sources = @(
         @{ Src = 'data\games.json';                   Dest = 'games.json' }
         @{ Src = 'powershell\GamePathDetection.psm1'; Dest = 'GamePathDetection.psm1' }
         @{ Src = 'scripts\find-game.ps1';             Dest = 'find-game.ps1' }
     )
+    $optionalBodies = @(
+        'install-body-cecil.cmd'
+        'install-body-asi.cmd'
+        'install-body-melonloader.cmd'
+        'install-body-reframework.cmd'
+        'install-body-shim.cmd'
+        'install-body-bepinex.cmd'
+        'uninstall-body.cmd'
+    )
+    foreach ($body in $optionalBodies) {
+        $srcPath = Join-Path $CoreRoot (Join-Path 'scripts' $body)
+        if (Test-Path $srcPath) {
+            $sources += @{ Src = "scripts\$body"; Dest = $body }
+        }
+    }
 
     $sharedDir = Join-Path $StagingDir 'shared'
     if (-not (Test-Path $sharedDir)) {

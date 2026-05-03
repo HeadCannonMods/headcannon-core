@@ -44,14 +44,19 @@ exit /b %_EC%
 :: pause check. :main's arg parser sets its own (local) YES_FLAG too, but
 :: cmd.exe discards local vars when setlocal pops on `exit /b`, so without
 :: this pre-scan the post-:main `if not defined YES_FLAG` always pauses
-:: and /y can't make the script headless. Square brackets are used (not
-:: quotes) to dodge cmd's path-with-trailing-backslash quoting hazard.
+:: and /y can't make the script headless. Quoted-string form is required
+:: here - bracket form `if [%~1]==[/y]` does NOT quote, so a path arg
+:: containing whitespace ("C:\...\Gone Home") splits across the brackets
+:: and crashes cmd with "[Home]==[/y] was unexpected at this time". The
+:: trailing-backslash hazard the bracket form was working around is moot
+:: with `%~1`: it strips the launcher's surrounding quotes before the
+:: comparison, so a value like `C:\foo\` can't escape the closing `"`.
 :: ============================================
 :detect_yes_flag
-if [%1]==[] exit /b 0
-if /i [%~1]==[/y]    set "YES_FLAG=1"
-if /i [%~1]==[-y]    set "YES_FLAG=1"
-if /i [%~1]==[--yes] set "YES_FLAG=1"
+if "%~1"=="" exit /b 0
+if /i "%~1"=="/y"    set "YES_FLAG=1"
+if /i "%~1"=="-y"    set "YES_FLAG=1"
+if /i "%~1"=="--yes" set "YES_FLAG=1"
 shift
 goto :detect_yes_flag
 
