@@ -304,14 +304,13 @@ function Invoke-DevDeployMelonLoader {
     Dev-deploy an Ultimate ASI Loader mod to the game's exe directory.
 .DESCRIPTION
     Copies the .asi (and any sibling INI / config files) from the build
-    output to the directory containing the game executable, derived from
-    GameExeRelpath. Loader install is NOT auto-handled here - dev
-    iteration assumes the loader (winmm.dll / dinput8.dll) is already
-    in place from a prior install.cmd run; if missing the deploy fails
-    loudly so the dev knows to run install.cmd first.
-.PARAMETER GameExeRelpath
-    Relative path under GamePath to the game's main exe. Used to derive
-    the exe directory (where ASI plugins land for nested-exe games).
+    output to the directory containing the game executable. The exe
+    location is resolved from games.json by GameId - some games have
+    nested .exe paths (e.g. ph/work/bin/x64/) and the ASI loader must
+    land in the same dir as the .exe. Loader install is NOT auto-handled
+    here - dev iteration assumes the loader (winmm.dll / dinput8.dll) is
+    already in place from a prior install.cmd run; if missing the deploy
+    fails loudly so the dev knows to run install.cmd first.
 .PARAMETER AsiLoaderName
     Filename the ASI DLL was renamed to (winmm.dll, dinput8.dll, etc.).
     Used only for the loader-presence check.
@@ -325,7 +324,6 @@ function Invoke-DevDeployASILoader {
         [Parameter(Mandatory)][string]$ProjectName,
         [Parameter(Mandatory)][string]$ModDllName,
         [Parameter(Mandatory)][ValidateSet('Debug','Release')][string]$Configuration,
-        [Parameter(Mandatory)][string]$GameExeRelpath,
         [string]$AsiLoaderName = 'winmm.dll',
         [string[]]$ExtraDlls = @(),
         [string]$GivenPath
@@ -334,10 +332,11 @@ function Invoke-DevDeployASILoader {
     $gamePath    = Resolve-DevGamePath -GameId $GameId -GameDisplayName $GameDisplayName -GivenPath $GivenPath
     $buildOutput = Resolve-DevBuildOutput -ProjectRoot $ProjectRoot -ProjectName $ProjectName -ModDllName $ModDllName -Configuration $Configuration
 
-    $exePath = Join-Path $gamePath $GameExeRelpath
+    $gameExeRelpath = (Get-GameConfig -GameId $GameId).Executable
+    $exePath = Join-Path $gamePath $gameExeRelpath
     $exeDir = Split-Path -Parent $exePath
     if (-not (Test-Path $exeDir)) {
-        throw "Exe directory not found: $exeDir (derived from $GameExeRelpath)"
+        throw "Exe directory not found: $exeDir (derived from $gameExeRelpath)"
     }
     if (-not (Test-Path (Join-Path $exeDir $AsiLoaderName))) {
         throw "ASI loader $AsiLoaderName not present at $exeDir. Run install.cmd to install the loader first."
@@ -433,7 +432,6 @@ function Invoke-DevDeployShim {
         [Parameter(Mandatory)][string]$ProjectName,
         [Parameter(Mandatory)][string]$ModDllName,
         [Parameter(Mandatory)][ValidateSet('Debug','Release')][string]$Configuration,
-        [Parameter(Mandatory)][string]$GameExeRelpath,
         [string[]]$ExtraDlls = @(),
         [string]$GivenPath
     )
@@ -441,10 +439,11 @@ function Invoke-DevDeployShim {
     $gamePath    = Resolve-DevGamePath -GameId $GameId -GameDisplayName $GameDisplayName -GivenPath $GivenPath
     $buildOutput = Resolve-DevBuildOutput -ProjectRoot $ProjectRoot -ProjectName $ProjectName -ModDllName $ModDllName -Configuration $Configuration
 
-    $exePath = Join-Path $gamePath $GameExeRelpath
+    $gameExeRelpath = (Get-GameConfig -GameId $GameId).Executable
+    $exePath = Join-Path $gamePath $gameExeRelpath
     $exeDir = Split-Path -Parent $exePath
     if (-not (Test-Path $exeDir)) {
-        throw "Exe directory not found: $exeDir (derived from $GameExeRelpath)"
+        throw "Exe directory not found: $exeDir (derived from $gameExeRelpath)"
     }
 
     # Backup-on-first-deploy. Same semantics as the install body's shim
