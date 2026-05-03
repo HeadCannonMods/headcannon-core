@@ -285,7 +285,11 @@ exit /b 0
 :: bundled version, run `pixi run update-deps` in the mod repo and commit.
 :: ============================================
 :install_bepinex
+:: Release ZIP layout has vendor/ flat next to install.cmd; the dev tree
+:: has install.cmd in <repo>/scripts/ and vendor/ at <repo>/vendor/. Try
+:: the release-zip layout first, then fall back to the dev-tree parent.
 set "VENDOR_DIR=%SCRIPT_DIR%vendor\bepinex"
+if not exist "%VENDOR_DIR%" set "VENDOR_DIR=%SCRIPT_DIR%..\vendor\bepinex"
 if defined BEPINEX_VENDOR_ZIP_NAME (
     set "VENDOR_ZIP=%VENDOR_DIR%\%BEPINEX_VENDOR_ZIP_NAME%"
 ) else (
