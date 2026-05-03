@@ -14,6 +14,54 @@ $ErrorActionPreference = "Stop"
 
 Import-Module (Join-Path $PSScriptRoot 'GamePathDetection.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'ModDeployment.psm1')     -Force
+Import-Module (Join-Path $PSScriptRoot 'ModLoaderSetup.psm1')    -Force
+
+# Shared resolver: prefer caller-supplied -GivenPath (the launcher always
+# passes one), else fall back to Find-GamePath against games.json. Throws
+# with a clear diagnostic on miss so every orchestrator's "not found"
+# error matches the install.cmd template's wording.
+function Resolve-DevGamePath {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$GameId,
+        [Parameter(Mandatory)][string]$GameDisplayName,
+        [string]$GivenPath
+    )
+    if ($GivenPath) {
+        Write-Host "Using launcher-provided game path: $GivenPath" -ForegroundColor Green
+        return $GivenPath
+    }
+    $gamePath = Find-GamePath -GameId $GameId
+    if (-not $gamePath) {
+        $config = Get-GameConfig -GameId $GameId
+        Write-GameNotFoundError `
+            -GameName $GameDisplayName `
+            -EnvVar $config.EnvVar `
+            -SteamFolder $config.SteamFolder
+        throw "Game not found: $GameDisplayName"
+    }
+    Write-Host "Found game installation at: $gamePath" -ForegroundColor Green
+    return $gamePath
+}
+
+# Shared resolver: locate the build output directory and verify the
+# primary mod DLL exists. Throws the canonical "run pixi run build" hint
+# on miss so every orchestrator surfaces the same dev-flow error.
+function Resolve-DevBuildOutput {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$ProjectRoot,
+        [Parameter(Mandatory)][string]$ProjectName,
+        [Parameter(Mandatory)][string]$ModDllName,
+        [Parameter(Mandatory)][string]$Configuration
+    )
+    $buildOutput = Get-BuildOutputPath -ProjectRoot $ProjectRoot -ProjectName $ProjectName -Configuration $Configuration
+    $sourceDll = Join-Path $buildOutput $ModDllName
+    if (-not (Test-Path $sourceDll)) {
+        throw "Built DLL not found at: $sourceDll. Run 'pixi run build' first."
+    }
+    return $buildOutput
+}
 
 <#
 .SYNOPSIS
@@ -78,23 +126,7 @@ function Invoke-DevDeployCecil {
         [Parameter(Mandatory)][scriptblock]$Patcher
     )
 
-    # -------- Resolve game path --------
-    if ($GivenPath) {
-        $gamePath = $GivenPath
-        Write-Host "Using launcher-provided game path: $gamePath" -ForegroundColor Green
-    } else {
-        $gamePath = Find-GamePath -GameId $GameId
-        if (-not $gamePath) {
-            $config = Get-GameConfig -GameId $GameId
-            Write-GameNotFoundError `
-                -GameName $GameDisplayName `
-                -EnvVar $config.EnvVar `
-                -SteamFolder $config.SteamFolder
-            throw "Game not found: $GameDisplayName"
-        }
-        Write-Host "Found game installation at: $gamePath" -ForegroundColor Green
-    }
-
+    $gamePath = Resolve-DevGamePath -GameId $GameId -GameDisplayName $GameDisplayName -GivenPath $GivenPath
     $managedPath = Join-Path $gamePath $ManagedSubfolder
     if (-not (Test-Path $managedPath)) {
         throw "Managed folder not found at: $managedPath"
@@ -103,13 +135,7 @@ function Invoke-DevDeployCecil {
     if (-not (Test-Path $assemblyPath)) {
         throw "$AssemblyDll not found at: $assemblyPath"
     }
-
-    # -------- Locate build output --------
-    $buildOutput = Get-BuildOutputPath -ProjectRoot $ProjectRoot -ProjectName $ProjectName -Configuration $Configuration
-    $sourceDll = Join-Path $buildOutput $ModDllName
-    if (-not (Test-Path $sourceDll)) {
-        throw "Built DLL not found at: $sourceDll. Run 'pixi run build' first."
-    }
+    $buildOutput = Resolve-DevBuildOutput -ProjectRoot $ProjectRoot -ProjectName $ProjectName -ModDllName $ModDllName -Configuration $Configuration
 
     # -------- Copy mod files --------
     Write-Host ""
@@ -148,6 +174,317 @@ function Invoke-DevDeployCecil {
     }
 }
 
+<#
+.SYNOPSIS
+    Dev-deploy a BepInEx mod to <game>/BepInEx/plugins/.
+.DESCRIPTION
+    Ensures BepInEx is installed (via ModLoaderSetup.Install-BepInEx) if
+    -EnsureLoader is set. Copies the freshly-built mod DLL + extras from
+    bin/<Configuration>/net48/ into BepInEx/plugins/. No assembly patch.
+.PARAMETER EnsureLoader
+    When set, calls Install-BepInEx if BepInEx isn't already detected
+    in the game folder. Pass $false to fail loud on missing loader
+    (useful in CI / strict dev flows).
+.PARAMETER MajorVersion
+    BepInEx major version to install when EnsureLoader fires (5 or 6).
+.PARAMETER Architecture
+    BepInEx architecture (x64 or x86) for the install.
+#>
+function Invoke-DevDeployBepInEx {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$GameId,
+        [Parameter(Mandatory)][string]$GameDisplayName,
+        [Parameter(Mandatory)][string]$ProjectRoot,
+        [Parameter(Mandatory)][string]$ProjectName,
+        [Parameter(Mandatory)][string]$ModDllName,
+        [Parameter(Mandatory)][ValidateSet('Debug','Release')][string]$Configuration,
+        [string[]]$ExtraDlls = @(),
+        [string]$GivenPath,
+        [switch]$EnsureLoader,
+        [ValidateSet(5,6)][int]$MajorVersion = 5,
+        [ValidateSet('x64','x86')][string]$Architecture = 'x64'
+    )
+
+    $gamePath    = Resolve-DevGamePath -GameId $GameId -GameDisplayName $GameDisplayName -GivenPath $GivenPath
+    $buildOutput = Resolve-DevBuildOutput -ProjectRoot $ProjectRoot -ProjectName $ProjectName -ModDllName $ModDllName -Configuration $Configuration
+
+    if (-not (Test-BepInExInstalled -GamePath $gamePath)) {
+        if ($EnsureLoader) {
+            Install-BepInEx -GamePath $gamePath -MajorVersion $MajorVersion -Architecture $Architecture | Out-Null
+        } else {
+            throw "BepInEx not detected at $gamePath. Pass -EnsureLoader to auto-install, or install BepInEx by hand."
+        }
+    }
+
+    $pluginsPath = Get-BepInExPluginsPath -GamePath $gamePath
+    if (-not (Test-Path $pluginsPath)) { New-Item -ItemType Directory -Path $pluginsPath -Force | Out-Null }
+
+    Write-Host ""
+    Write-Host "Deploying mod files..." -ForegroundColor Yellow
+    $copyResult = Copy-ModFiles `
+        -SourceDir $buildOutput `
+        -TargetDir $pluginsPath `
+        -ModDllName $ModDllName `
+        -Dependencies $ExtraDlls
+    if (-not $copyResult.Success) {
+        Write-DeploymentError -Errors $copyResult.Errors
+        throw "Copy-ModFiles failed"
+    }
+
+    return @{
+        GamePath        = $gamePath
+        PluginsPath     = $pluginsPath
+        DeployedDllPath = (Join-Path $pluginsPath $ModDllName)
+    }
+}
+
+<#
+.SYNOPSIS
+    Dev-deploy a MelonLoader mod to <game>/Mods/.
+.DESCRIPTION
+    Ensures MelonLoader is installed (via Install-MelonLoader) if
+    -EnsureLoader is set. Copies mod DLL + extras into Mods/. Some mods
+    pin a specific MelonLoader version (Firewatch needs 0.5.7 to avoid
+    the RegexOptions crash on Unity 2017 Mono) - pass it via -Version.
+#>
+function Invoke-DevDeployMelonLoader {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$GameId,
+        [Parameter(Mandatory)][string]$GameDisplayName,
+        [Parameter(Mandatory)][string]$ProjectRoot,
+        [Parameter(Mandatory)][string]$ProjectName,
+        [Parameter(Mandatory)][string]$ModDllName,
+        [Parameter(Mandatory)][ValidateSet('Debug','Release')][string]$Configuration,
+        [string[]]$ExtraDlls = @(),
+        [string]$GivenPath,
+        [switch]$EnsureLoader,
+        [ValidateSet('x64','x86')][string]$Architecture = 'x64',
+        [string]$Version
+    )
+
+    $gamePath    = Resolve-DevGamePath -GameId $GameId -GameDisplayName $GameDisplayName -GivenPath $GivenPath
+    $buildOutput = Resolve-DevBuildOutput -ProjectRoot $ProjectRoot -ProjectName $ProjectName -ModDllName $ModDllName -Configuration $Configuration
+
+    if (-not (Test-MelonLoaderInstalled -GamePath $gamePath)) {
+        if ($EnsureLoader) {
+            $installArgs = @{ GamePath = $gamePath; Architecture = $Architecture }
+            if ($Version) { $installArgs['Version'] = $Version }
+            Install-MelonLoader @installArgs | Out-Null
+        } else {
+            throw "MelonLoader not detected at $gamePath. Pass -EnsureLoader to auto-install, or install MelonLoader by hand."
+        }
+    }
+
+    $modsPath = Get-MelonLoaderModsPath -GamePath $gamePath
+    if (-not (Test-Path $modsPath)) { New-Item -ItemType Directory -Path $modsPath -Force | Out-Null }
+
+    Write-Host ""
+    Write-Host "Deploying mod files..." -ForegroundColor Yellow
+    $copyResult = Copy-ModFiles `
+        -SourceDir $buildOutput `
+        -TargetDir $modsPath `
+        -ModDllName $ModDllName `
+        -Dependencies $ExtraDlls
+    if (-not $copyResult.Success) {
+        Write-DeploymentError -Errors $copyResult.Errors
+        throw "Copy-ModFiles failed"
+    }
+
+    return @{
+        GamePath        = $gamePath
+        ModsPath        = $modsPath
+        DeployedDllPath = (Join-Path $modsPath $ModDllName)
+    }
+}
+
+<#
+.SYNOPSIS
+    Dev-deploy an Ultimate ASI Loader mod to the game's exe directory.
+.DESCRIPTION
+    Copies the .asi (and any sibling INI / config files) from the build
+    output to the directory containing the game executable, derived from
+    GameExeRelpath. Loader install is NOT auto-handled here - dev
+    iteration assumes the loader (winmm.dll / dinput8.dll) is already
+    in place from a prior install.cmd run; if missing the deploy fails
+    loudly so the dev knows to run install.cmd first.
+.PARAMETER GameExeRelpath
+    Relative path under GamePath to the game's main exe. Used to derive
+    the exe directory (where ASI plugins land for nested-exe games).
+.PARAMETER AsiLoaderName
+    Filename the ASI DLL was renamed to (winmm.dll, dinput8.dll, etc.).
+    Used only for the loader-presence check.
+#>
+function Invoke-DevDeployASILoader {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$GameId,
+        [Parameter(Mandatory)][string]$GameDisplayName,
+        [Parameter(Mandatory)][string]$ProjectRoot,
+        [Parameter(Mandatory)][string]$ProjectName,
+        [Parameter(Mandatory)][string]$ModDllName,
+        [Parameter(Mandatory)][ValidateSet('Debug','Release')][string]$Configuration,
+        [Parameter(Mandatory)][string]$GameExeRelpath,
+        [string]$AsiLoaderName = 'winmm.dll',
+        [string[]]$ExtraDlls = @(),
+        [string]$GivenPath
+    )
+
+    $gamePath    = Resolve-DevGamePath -GameId $GameId -GameDisplayName $GameDisplayName -GivenPath $GivenPath
+    $buildOutput = Resolve-DevBuildOutput -ProjectRoot $ProjectRoot -ProjectName $ProjectName -ModDllName $ModDllName -Configuration $Configuration
+
+    $exePath = Join-Path $gamePath $GameExeRelpath
+    $exeDir = Split-Path -Parent $exePath
+    if (-not (Test-Path $exeDir)) {
+        throw "Exe directory not found: $exeDir (derived from $GameExeRelpath)"
+    }
+    if (-not (Test-Path (Join-Path $exeDir $AsiLoaderName))) {
+        throw "ASI loader $AsiLoaderName not present at $exeDir. Run install.cmd to install the loader first."
+    }
+
+    Write-Host ""
+    Write-Host "Deploying mod files to: $exeDir" -ForegroundColor Yellow
+    $copyResult = Copy-ModFiles `
+        -SourceDir $buildOutput `
+        -TargetDir $exeDir `
+        -ModDllName $ModDllName `
+        -Dependencies $ExtraDlls
+    if (-not $copyResult.Success) {
+        Write-DeploymentError -Errors $copyResult.Errors
+        throw "Copy-ModFiles failed"
+    }
+
+    return @{
+        GamePath        = $gamePath
+        ExeDir          = $exeDir
+        DeployedDllPath = (Join-Path $exeDir $ModDllName)
+    }
+}
+
+<#
+.SYNOPSIS
+    Dev-deploy a REFramework mod to <game>/reframework/plugins/.
+.DESCRIPTION
+    Copies the mod DLL + extras into reframework/plugins/. Loader
+    install is NOT auto-handled (REFramework's per-game zip is
+    vendored, easier to install via install.cmd than by-hand here);
+    the deploy fails loudly if dinput8.dll / reframework/ are missing.
+#>
+function Invoke-DevDeployREFramework {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$GameId,
+        [Parameter(Mandatory)][string]$GameDisplayName,
+        [Parameter(Mandatory)][string]$ProjectRoot,
+        [Parameter(Mandatory)][string]$ProjectName,
+        [Parameter(Mandatory)][string]$ModDllName,
+        [Parameter(Mandatory)][ValidateSet('Debug','Release')][string]$Configuration,
+        [string[]]$ExtraDlls = @(),
+        [string]$GivenPath
+    )
+
+    $gamePath    = Resolve-DevGamePath -GameId $GameId -GameDisplayName $GameDisplayName -GivenPath $GivenPath
+    $buildOutput = Resolve-DevBuildOutput -ProjectRoot $ProjectRoot -ProjectName $ProjectName -ModDllName $ModDllName -Configuration $Configuration
+
+    if (-not (Test-Path (Join-Path $gamePath 'dinput8.dll'))) {
+        throw "REFramework loader (dinput8.dll) not present at $gamePath. Run install.cmd to install the loader first."
+    }
+    $pluginsPath = Join-Path $gamePath 'reframework\plugins'
+    if (-not (Test-Path $pluginsPath)) { New-Item -ItemType Directory -Path $pluginsPath -Force | Out-Null }
+
+    Write-Host ""
+    Write-Host "Deploying mod files to: $pluginsPath" -ForegroundColor Yellow
+    $copyResult = Copy-ModFiles `
+        -SourceDir $buildOutput `
+        -TargetDir $pluginsPath `
+        -ModDllName $ModDllName `
+        -Dependencies $ExtraDlls
+    if (-not $copyResult.Success) {
+        Write-DeploymentError -Errors $copyResult.Errors
+        throw "Copy-ModFiles failed"
+    }
+
+    return @{
+        GamePath        = $gamePath
+        PluginsPath     = $pluginsPath
+        DeployedDllPath = (Join-Path $pluginsPath $ModDllName)
+    }
+}
+
+<#
+.SYNOPSIS
+    Dev-deploy a shim-only mod (system-DLL replacement) to the game's
+    exe directory, with first-install backup of any pre-existing file.
+.DESCRIPTION
+    Shim mods replace a system DLL the game loads at startup
+    (xinput1_3.dll / dxgi.dll / winmm.dll / etc.). On first deploy, if
+    the target name already exists in the exe dir, back it up to
+    <name>.backup so uninstall can restore it. Subsequent deploys leave
+    the .backup intact - the user's pre-mod state must survive
+    re-deploys.
+#>
+function Invoke-DevDeployShim {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$GameId,
+        [Parameter(Mandatory)][string]$GameDisplayName,
+        [Parameter(Mandatory)][string]$ProjectRoot,
+        [Parameter(Mandatory)][string]$ProjectName,
+        [Parameter(Mandatory)][string]$ModDllName,
+        [Parameter(Mandatory)][ValidateSet('Debug','Release')][string]$Configuration,
+        [Parameter(Mandatory)][string]$GameExeRelpath,
+        [string[]]$ExtraDlls = @(),
+        [string]$GivenPath
+    )
+
+    $gamePath    = Resolve-DevGamePath -GameId $GameId -GameDisplayName $GameDisplayName -GivenPath $GivenPath
+    $buildOutput = Resolve-DevBuildOutput -ProjectRoot $ProjectRoot -ProjectName $ProjectName -ModDllName $ModDllName -Configuration $Configuration
+
+    $exePath = Join-Path $gamePath $GameExeRelpath
+    $exeDir = Split-Path -Parent $exePath
+    if (-not (Test-Path $exeDir)) {
+        throw "Exe directory not found: $exeDir (derived from $GameExeRelpath)"
+    }
+
+    # Backup-on-first-deploy. Same semantics as the install body's shim
+    # logic - .backup is the user's pre-mod state and never gets clobbered.
+    $allFiles = @($ModDllName) + $ExtraDlls
+    foreach ($f in $allFiles) {
+        $target = Join-Path $exeDir $f
+        $backup = "$target.backup"
+        if ((Test-Path $target) -and -not (Test-Path $backup)) {
+            Copy-Item -Path $target -Destination $backup -Force
+            Write-Host "  Backed up original $f to $f.backup" -ForegroundColor Gray
+        }
+    }
+
+    Write-Host ""
+    Write-Host "Deploying shim files to: $exeDir" -ForegroundColor Yellow
+    $copyResult = Copy-ModFiles `
+        -SourceDir $buildOutput `
+        -TargetDir $exeDir `
+        -ModDllName $ModDllName `
+        -Dependencies $ExtraDlls
+    if (-not $copyResult.Success) {
+        Write-DeploymentError -Errors $copyResult.Errors
+        throw "Copy-ModFiles failed"
+    }
+
+    return @{
+        GamePath        = $gamePath
+        ExeDir          = $exeDir
+        DeployedDllPath = (Join-Path $exeDir $ModDllName)
+    }
+}
+
 Export-ModuleMember -Function @(
-    'Invoke-DevDeployCecil'
+    'Invoke-DevDeployCecil',
+    'Invoke-DevDeployBepInEx',
+    'Invoke-DevDeployMelonLoader',
+    'Invoke-DevDeployASILoader',
+    'Invoke-DevDeployREFramework',
+    'Invoke-DevDeployShim',
+    'Resolve-DevGamePath',
+    'Resolve-DevBuildOutput'
 )
