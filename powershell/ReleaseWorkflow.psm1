@@ -6,6 +6,47 @@ $ErrorActionPreference = "Stop"
 
 <#
 .SYNOPSIS
+    Fast-forward the cameraunlock-core submodule to its origin/main tip.
+.DESCRIPTION
+    Called by Copy-SharedBundle by default so the templates / bodies /
+    games.json shipped in a release zip are always whatever's on the
+    cameraunlock-core main branch when the release is cut - regardless
+    of where the mod's submodule pointer was last bumped to. This is
+    the "single source of truth" guarantee: a body bug fix in
+    cameraunlock-core ships to a mod's users on that mod's next release
+    with no per-mod template re-syncing or submodule-pointer bumping.
+
+    Locates the parent mod repo by walking one level up from CoreRoot
+    (the standard layout is <mod>/cameraunlock-core/) and runs
+    `git submodule update --remote --merge -- cameraunlock-core` against
+    it. `--merge` rebases any local cameraunlock-core commits on top of
+    origin/main; conflicts surface as a hard failure rather than a
+    silent stale-bundle release.
+.PARAMETER CoreRoot
+    Path to the cameraunlock-core checkout (i.e. the submodule path).
+#>
+function Update-CameraUnlockCoreToRemoteTip {
+    [CmdletBinding()]
+    param([Parameter(Mandatory=$true)][string]$CoreRoot)
+
+    $modRoot = [System.IO.Path]::GetFullPath((Join-Path $CoreRoot '..'))
+    if (-not (Test-Path (Join-Path $modRoot '.gitmodules'))) {
+        # Not running inside a mod repo with submodules - we're probably
+        # in the cameraunlock-core dev tree itself. Nothing to refresh.
+        return
+    }
+
+    Write-Host "Refreshing cameraunlock-core submodule from origin/main..." -ForegroundColor Cyan
+    & git -C $modRoot submodule update --remote --merge -- cameraunlock-core 2>&1 | ForEach-Object {
+        Write-Host "  $_" -ForegroundColor Gray
+    }
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to fast-forward cameraunlock-core (git exit $LASTEXITCODE). Resolve local conflicts in cameraunlock-core/ and re-run, or pass -NoRefresh to Copy-SharedBundle to skip."
+    }
+}
+
+<#
+.SYNOPSIS
     Stage the shared detection bundle into a release staging directory.
 .DESCRIPTION
     Each mod's install.cmd / uninstall.cmd calls shared/find-game.ps1
@@ -25,13 +66,25 @@ function Copy-SharedBundle {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory=$true)][string]$StagingDir,
-        [string]$CoreRoot
+        [string]$CoreRoot,
+        # Skip pulling cameraunlock-core to its remote tip before copying.
+        # Default behaviour fast-forwards the submodule so the bodies /
+        # find-game.ps1 / games.json shipped in the release zip are
+        # always whatever is on cameraunlock-core's main branch at
+        # release time. Pass -NoRefresh in CI flows that have already
+        # synced the submodule themselves, or during local iteration
+        # when you're testing against a deliberately-pinned core.
+        [switch]$NoRefresh
     )
 
     if (-not $CoreRoot) {
         # $PSScriptRoot is .../cameraunlock-core/powershell; the core root
         # is one up. Normalize with GetFullPath to collapse the `..`.
         $CoreRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+    }
+
+    if (-not $NoRefresh) {
+        Update-CameraUnlockCoreToRemoteTip -CoreRoot $CoreRoot
     }
 
     # install-body-* and uninstall-body are the per-strategy script bodies
@@ -662,6 +715,7 @@ function Set-CsprojVersion {
 
 # Export functions
 Export-ModuleMember -Function @(
+    'Update-CameraUnlockCoreToRemoteTip',
     'Copy-SharedBundle',
     'Test-SemanticVersion',
     'Step-SemanticVersion',
