@@ -145,7 +145,7 @@ std::string IniReader::ReadString(const char* section, const char* key, const ch
     while (fgets(line, sizeof(line), file)) {
         // Trim whitespace
         char* start = line;
-        while (*start && std::isspace(*start)) start++;
+        while (*start && std::isspace(static_cast<unsigned char>(*start))) start++;
 
         // Check for section
         if (*start == '[') {
@@ -162,18 +162,26 @@ std::string IniReader::ReadString(const char* section, const char* key, const ch
         // Extract key
         *eq = '\0';
         char* keyEnd = eq - 1;
-        while (keyEnd > start && std::isspace(*keyEnd)) *keyEnd-- = '\0';
+        while (keyEnd > start && std::isspace(static_cast<unsigned char>(*keyEnd))) *keyEnd-- = '\0';
 
         if (strcmp(start, key) != 0) continue;
 
         // Extract value
         char* value = eq + 1;
-        while (*value && std::isspace(*value)) value++;
+        while (*value && std::isspace(static_cast<unsigned char>(*value))) value++;
 
-        // Remove trailing whitespace and newline
-        char* valueEnd = value + strlen(value) - 1;
-        while (valueEnd > value && (std::isspace(*valueEnd) || *valueEnd == '\n' || *valueEnd == '\r')) {
-            *valueEnd-- = '\0';
+        // Remove trailing whitespace and newline. Guard against empty value
+        // (e.g. "key="): stepping back from value would compute `value - 1`,
+        // which is undefined pointer arithmetic before the start of the buffer.
+        size_t valueLen = strlen(value);
+        if (valueLen > 0) {
+            char* valueEnd = value + valueLen - 1;
+            while (valueEnd >= value && (std::isspace(static_cast<unsigned char>(*valueEnd))
+                                         || *valueEnd == '\n' || *valueEnd == '\r')) {
+                *valueEnd = '\0';
+                if (valueEnd == value) break;
+                --valueEnd;
+            }
         }
 
         fclose(file);

@@ -168,11 +168,19 @@ void* FindRTTIDescriptor(void* module, std::string_view class_name) {
         return nullptr;
     }
 
+    // Empty / over-long names cannot match. Guarding here also stops the
+    // unsigned `size - class_name.size()` below from underflowing into a
+    // huge value and walking past the end of the module image.
+    if (class_name.empty() || class_name.size() > size) {
+        return nullptr;
+    }
+
     // Search for the class name string in the module
     // RTTI type descriptor starts with vtable pointer followed by spare data, then name
     const uint8_t* start = reinterpret_cast<const uint8_t*>(base);
 
-    for (size_t i = 0; i <= size - class_name.size(); ++i) {
+    const size_t maxStart = size - class_name.size();
+    for (size_t i = 0; i <= maxStart; ++i) {
         if (std::memcmp(start + i, class_name.data(), class_name.size()) == 0) {
             // Found the name string - this is inside the type_info structure
             // The structure layout is:

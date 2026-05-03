@@ -188,6 +188,68 @@ namespace CameraUnlock.Core.Tests.Aim
         }
 
         [Fact]
+        public void Calculate_PitchAt90Degrees_ReturnsFiniteOffset()
+        {
+            // Regression: when pitch is ±90°, az = cos(pitch) * cos(yaw) ≈ 0 and
+            // the perspective divide produced ±Infinity / NaN, propagating into
+            // the reticle UI. The guard clamps the result to (0, 0).
+            ScreenOffsetCalculator.Calculate(
+                10f, 90f, 0f,
+                HorizontalFov, VerticalFov,
+                ScreenWidth, ScreenHeight,
+                CompensationScale,
+                out float x, out float y);
+
+            Assert.True(float.IsFinite(x), $"X should be finite, got {x}");
+            Assert.True(float.IsFinite(y), $"Y should be finite, got {y}");
+        }
+
+        [Fact]
+        public void Calculate_YawAt90Degrees_ReturnsFiniteOffset()
+        {
+            ScreenOffsetCalculator.Calculate(
+                90f, 10f, 0f,
+                HorizontalFov, VerticalFov,
+                ScreenWidth, ScreenHeight,
+                CompensationScale,
+                out float x, out float y);
+
+            Assert.True(float.IsFinite(x));
+            Assert.True(float.IsFinite(y));
+        }
+
+        [Fact]
+        public void Calculate_ZeroFov_ReturnsZeroOffset()
+        {
+            // Degenerate FOV (e.g. orthographic / unset camera) used to divide by
+            // tan(0) = 0 and emit ±Infinity. The guard collapses the projection
+            // to (0, 0) instead.
+            ScreenOffsetCalculator.Calculate(
+                10f, 5f, 0f,
+                0f, 0f,
+                ScreenWidth, ScreenHeight,
+                CompensationScale,
+                out float x, out float y);
+
+            Assert.Equal(0f, x);
+            Assert.Equal(0f, y);
+        }
+
+        [Fact]
+        public void CalculatePrecomputed_DegenerateFov_ReturnsZeroOffset()
+        {
+            ScreenOffsetCalculator.CalculatePrecomputed(
+                10f, 5f, 0f,
+                0f, 0f,
+                ScreenWidth * 0.5f, ScreenHeight * 0.5f,
+                CompensationScale,
+                out float x, out float y);
+
+            Assert.Equal(0f, x);
+            Assert.Equal(0f, y);
+        }
+
+        [Fact]
         public void Calculate_SymmetricAngles_ProduceSymmetricOffsets()
         {
             ScreenOffsetCalculator.Calculate(

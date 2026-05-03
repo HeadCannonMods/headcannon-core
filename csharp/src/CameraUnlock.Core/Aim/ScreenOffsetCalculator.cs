@@ -9,6 +9,12 @@ namespace CameraUnlock.Core.Aim
     /// </summary>
     public static class ScreenOffsetCalculator
     {
+        // Magnitude floor below which the perspective divide / FOV scale is
+        // treated as singular. Picked to be small enough that legitimate near-edge
+        // poses still project, but large enough to keep the result finite when a
+        // call site feeds in a degenerate FOV or a head pose pointing 90° off-axis.
+        private const float ProjectionEpsilon = 1e-6f;
+
         /// <summary>
         /// Calculates screen offset using tangent-based FOV projection.
         /// This method works without Unity's camera system.
@@ -64,7 +70,19 @@ namespace CameraUnlock.Core.Aim
             // elliptical distortion from different horizontal/vertical FOV scales.
             ApplyRollRotation(ax, ay, rollDegrees, out ax, out ay);
 
-            // Perspective divide and FOV scaling
+            // Perspective divide and FOV scaling. az -> 0 when pitch or yaw approach
+            // ±90°, and tanHalf* -> 0 when FOV is degenerate (e.g. zoomed-out menu cam).
+            // In either case the projection is undefined; emit zero offset so the
+            // reticle stays centred instead of jumping to ±Infinity / NaN on screen.
+            if (System.Math.Abs(az) < ProjectionEpsilon ||
+                System.Math.Abs(tanHalfFovX) < ProjectionEpsilon ||
+                System.Math.Abs(tanHalfFovY) < ProjectionEpsilon)
+            {
+                offsetX = 0f;
+                offsetY = 0f;
+                return;
+            }
+
             offsetX = (ax / az) / tanHalfFovX * halfWidth * compensationScale;
             offsetY = (ay / az) / tanHalfFovY * halfHeight * compensationScale;
         }
@@ -143,6 +161,17 @@ namespace CameraUnlock.Core.Aim
             float az = cosP * cosY;
 
             ApplyRollRotation(ax, ay, rollDegrees, out ax, out ay);
+
+            // See Calculate(): clamp to zero offset when the projection is singular
+            // so callers don't propagate ±Infinity / NaN into the reticle UI.
+            if (System.Math.Abs(az) < ProjectionEpsilon ||
+                System.Math.Abs(tanHalfFovX) < ProjectionEpsilon ||
+                System.Math.Abs(tanHalfFovY) < ProjectionEpsilon)
+            {
+                offsetX = 0f;
+                offsetY = 0f;
+                return;
+            }
 
             offsetX = (ax / az) / tanHalfFovX * halfWidth * compensationScale;
             offsetY = (ay / az) / tanHalfFovY * halfHeight * compensationScale;

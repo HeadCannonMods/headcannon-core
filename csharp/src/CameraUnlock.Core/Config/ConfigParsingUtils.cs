@@ -34,17 +34,25 @@ namespace CameraUnlock.Core.Config
                 !TryParseFloat(parts[2], out b))
                 return false;
 
+            // If the user supplied an alpha component, it must parse. Silently
+            // falling back to 1.0 hides typos in config files.
             if (parts.Length >= 4 && !TryParseFloat(parts[3], out a))
-                a = 1f;
+                return false;
 
-            // Auto-detect 0-255 range vs 0-1 range
-            if (r > 1f || g > 1f || b > 1f || a > 1f)
+            // Auto-detect 0-255 range vs 0-1 range. Use the max of the RGB
+            // channels (not OR-of-channels) so a single out-of-range value
+            // is still scaled with its peers; alpha is detected independently
+            // because it routinely defaults to 1.0 in 0-255 input as well.
+            float maxRgb = r;
+            if (g > maxRgb) maxRgb = g;
+            if (b > maxRgb) maxRgb = b;
+            if (maxRgb > 1f)
             {
                 r /= 255f;
                 g /= 255f;
                 b /= 255f;
-                if (a > 1f) a /= 255f;
             }
+            if (a > 1f) a /= 255f;
 
             rgba[0] = MathUtils.Clamp01(r);
             rgba[1] = MathUtils.Clamp01(g);
