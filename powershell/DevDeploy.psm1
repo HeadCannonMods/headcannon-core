@@ -184,7 +184,8 @@ function Invoke-DevDeployBepInEx {
         [switch]$EnsureLoader,
         [ValidateSet(5,6)][int]$MajorVersion = 5,
         [ValidateSet('x64','x86')][string]$Architecture = 'x64',
-        [string]$VendorZip
+        [string]$VendorZip,
+        [string]$PluginSubfolder
     )
 
     Assert-DevBuildArtifact -BuildOutputPath $BuildOutputPath -FileName $ModDllName
@@ -206,6 +207,7 @@ function Invoke-DevDeployBepInEx {
     }
 
     $pluginsPath = Get-BepInExPluginsPath -GamePath $gamePath
+    if ($PluginSubfolder) { $pluginsPath = Join-Path $pluginsPath $PluginSubfolder }
     if (-not (Test-Path $pluginsPath)) { New-Item -ItemType Directory -Path $pluginsPath -Force | Out-Null }
 
     Write-Host ""
