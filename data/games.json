@@ -51,7 +51,10 @@
       "env_var": "EASY_DELIVERY_CO_PATH",
       "steam_folder": "Easy Delivery Co",
       "executable_relpath": "EasyDeliveryCo.exe",
-      "data_folder": "EasyDeliveryCo_Data"
+      "data_folder": "EasyDeliveryCo_Data",
+      "xbox_paths": [
+        "C:\\XboxGames\\Easy Delivery Co\\Content"
+      ]
     },
     "eternal-afternoon": {
       "display_name": "Eternal Afternoon",
