@@ -90,6 +90,9 @@ function Get-GameConfigs {
         if (Test-JsonProp $src 'gog_ids') {
             if ($src.gog_ids.Count -gt 0) { $cfg.GogGameIds = @($src.gog_ids) }
         }
+        if (Test-JsonProp $src 'ubisoft_app_ids') {
+            if ($src.ubisoft_app_ids.Count -gt 0) { $cfg.UbisoftAppIds = @($src.ubisoft_app_ids | ForEach-Object { [string]$_ }) }
+        }
         if (Test-JsonProp $src 'epic_search_paths') {
             if ($src.epic_search_paths.Count -gt 0) { $cfg.EpicPaths = @($src.epic_search_paths) }
         }
@@ -192,6 +195,49 @@ function Find-GogGamePath {
                 $gamePath = (Get-ItemProperty -Path $key -ErrorAction Stop).path
                 if ($gamePath -and (Test-Path (Join-Path $gamePath $Executable))) {
                     return $gamePath
+                }
+            }
+        }
+    }
+
+    return $null
+}
+
+<#
+.SYNOPSIS
+    Finds a game in the Ubisoft Connect launcher registry.
+.PARAMETER UbisoftAppIds
+    Array of Ubisoft launcher install IDs to check (numeric, as strings or ints).
+.PARAMETER Executable
+    Executable name to verify the installation.
+.OUTPUTS
+    System.String or $null
+#>
+function Find-UbisoftGamePath {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory=$true)]
+        [string[]]$UbisoftAppIds,
+
+        [Parameter(Mandatory=$true)]
+        [string]$Executable
+    )
+
+    foreach ($appId in $UbisoftAppIds) {
+        $ubiKeys = @(
+            "HKLM:\SOFTWARE\WOW6432Node\Ubisoft\Launcher\Installs\$appId",
+            "HKLM:\SOFTWARE\Ubisoft\Launcher\Installs\$appId"
+        )
+
+        foreach ($key in $ubiKeys) {
+            if (Test-Path $key) {
+                $installDir = (Get-ItemProperty -Path $key -ErrorAction Stop).InstallDir
+                if ($installDir) {
+                    $gamePath = $installDir.TrimEnd('/', '\')
+                    if (Test-GameInstallation -Path $gamePath -Executable $Executable) {
+                        return $gamePath
+                    }
                 }
             }
         }
@@ -309,7 +355,9 @@ function Find-OWMLPath {
     1. Environment variable
     2. Steam libraries (via registry + libraryfolders.vdf)
     3. GOG registry
-    4. Epic Games paths
+    4. Ubisoft Connect registry
+    5. Epic Games paths
+    6. Xbox/Microsoft Store paths
 .PARAMETER GameId
     The game identifier (key in $GameConfigs).
 .PARAMETER Config
@@ -384,7 +432,15 @@ function Find-GamePath {
         }
     }
 
-    # Priority 4: Epic Games paths
+    # Priority 4: Ubisoft Connect registry
+    if ($Config.ContainsKey('UbisoftAppIds') -and $Config.UbisoftAppIds) {
+        $ubiPath = Find-UbisoftGamePath -UbisoftAppIds $Config.UbisoftAppIds -Executable $executable
+        if ($ubiPath) {
+            return $ubiPath
+        }
+    }
+
+    # Priority 5: Epic Games paths
     if ($Config.ContainsKey('EpicPaths') -and $Config.EpicPaths) {
         foreach ($path in $Config.EpicPaths) {
             if (Test-GameInstallation -Path $path -Executable $executable) {
@@ -393,7 +449,7 @@ function Find-GamePath {
         }
     }
 
-    # Priority 5: Xbox/Microsoft Store paths
+    # Priority 6: Xbox/Microsoft Store paths
     if ($Config.ContainsKey('XboxPaths') -and $Config.XboxPaths) {
         foreach ($path in $Config.XboxPaths) {
             if (Test-GameInstallation -Path $path -Executable $executable) {
@@ -551,6 +607,7 @@ Export-ModuleMember -Function @(
     'Find-SteamLibraries',
     'Find-SteamGameByAppId',
     'Find-GogGamePath',
+    'Find-UbisoftGamePath',
     'Find-GamePath',
     'Find-OWMLPath',
     'Test-GameInstallation',

@@ -243,6 +243,7 @@
       "env_var": "ASSASSINS_CREED_UNITY_PATH",
       "steam_app_id": 289650,
       "steam_folder": "Assassin's Creed Unity",
+      "ubisoft_app_ids": [720],
       "executable_relpath": "ACU.exe"
     }
   }

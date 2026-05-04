@@ -150,6 +150,13 @@ function Get-MelonLoaderLibPath {
     Enable BepInEx console logging (default: true for development).
 .PARAMETER Force
     Reinstall even if already present.
+.PARAMETER VendorZip
+    Optional path to a vendored BepInEx zip (e.g. <mod>/vendor/bepinex/
+    BepInEx_win_x64.zip). When supplied, the loader is extracted from this
+    file and the GitHub-fetch path is bypassed entirely. Required for
+    doctrine-clean dev-deploy: install.cmd uses the same vendored copy.
+    When the path is supplied but does not exist, this throws - we never
+    silently fall back to the network when vendor was requested.
 .OUTPUTS
     Hashtable with installation details including version.
 #>
@@ -162,7 +169,8 @@ function Install-BepInEx {
         [ValidateSet(5, 6)]
         [int]$MajorVersion = 5,
         [bool]$EnableConsole = $true,
-        [switch]$Force
+        [switch]$Force,
+        [string]$VendorZip
     )
 
     # Check if already installed
@@ -176,61 +184,75 @@ function Install-BepInEx {
 
     Write-Host "Installing BepInEx to: $GamePath" -ForegroundColor Yellow
 
-    # Fetch release info from GitHub
-    Write-Host "  Fetching BepInEx release information..." -ForegroundColor Gray
-    $apiUrl = "https://api.github.com/repos/BepInEx/BepInEx/releases"
-
-    try {
-        $releases = Invoke-RestMethod -Uri $apiUrl -Headers @{ "User-Agent" = "HeadTracking-ModLoader" }
-    } catch {
-        throw "Failed to fetch BepInEx releases from GitHub: $_"
-    }
-
-    # Find appropriate release
-    if ($MajorVersion -eq 5) {
-        $release = $releases | Where-Object { $_.tag_name -match '^v5\.' -and -not $_.prerelease } | Select-Object -First 1
-    } else {
-        $release = $releases | Where-Object { $_.tag_name -match '^v6\.' -and -not $_.prerelease } | Select-Object -First 1
-        if (-not $release) {
-            # Fall back to latest pre-release for v6
-            $release = $releases | Where-Object { $_.tag_name -match '^v6\.' } | Select-Object -First 1
+    if ($VendorZip) {
+        if (-not (Test-Path $VendorZip)) {
+            throw "VendorZip not found at: $VendorZip. Run 'pixi run update-deps' to refresh the vendored loader."
         }
+        Write-Host "  Extracting vendored: $VendorZip" -ForegroundColor Gray
+        try {
+            Expand-Archive -Path $VendorZip -DestinationPath $GamePath -Force
+        } catch {
+            throw "Failed to extract vendored BepInEx from $VendorZip : $_"
+        }
+        $coreDll = Join-Path $GamePath 'BepInEx/core/BepInEx.dll'
+        if (Test-Path $coreDll) {
+            $version = (Get-Item $coreDll).VersionInfo.FileVersion
+        } else {
+            throw "BepInEx.dll missing after extracting $VendorZip - vendored zip is corrupt."
+        }
+        Write-Host "  Installed BepInEx v$version" -ForegroundColor Cyan
+    } else {
+        # Fetch release info from GitHub (legacy path; prefer -VendorZip).
+        Write-Host "  Fetching BepInEx release information..." -ForegroundColor Gray
+        $apiUrl = "https://api.github.com/repos/BepInEx/BepInEx/releases"
+
+        try {
+            $releases = Invoke-RestMethod -Uri $apiUrl -Headers @{ "User-Agent" = "HeadTracking-ModLoader" }
+        } catch {
+            throw "Failed to fetch BepInEx releases from GitHub: $_"
+        }
+
+        if ($MajorVersion -eq 5) {
+            $release = $releases | Where-Object { $_.tag_name -match '^v5\.' -and -not $_.prerelease } | Select-Object -First 1
+        } else {
+            $release = $releases | Where-Object { $_.tag_name -match '^v6\.' -and -not $_.prerelease } | Select-Object -First 1
+            if (-not $release) {
+                $release = $releases | Where-Object { $_.tag_name -match '^v6\.' } | Select-Object -First 1
+            }
+        }
+
+        if (-not $release) {
+            throw "Could not find BepInEx $MajorVersion.x release"
+        }
+
+        $version = $release.tag_name -replace '^v', ''
+        Write-Host "  Found BepInEx v$version" -ForegroundColor Cyan
+
+        $assetPattern = "BepInEx_win_${Architecture}.*\.zip$"
+        $asset = $release.assets | Where-Object { $_.name -match $assetPattern } | Select-Object -First 1
+
+        if (-not $asset) {
+            throw "Could not find BepInEx $Architecture asset in release"
+        }
+
+        $tempZip = Join-Path $env:TEMP "BepInEx_install.zip"
+        Write-Host "  Downloading: $($asset.name)..." -ForegroundColor Gray
+
+        try {
+            Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $tempZip -UseBasicParsing
+        } catch {
+            throw "Failed to download BepInEx: $_"
+        }
+
+        Write-Host "  Extracting to game directory..." -ForegroundColor Gray
+        try {
+            Expand-Archive -Path $tempZip -DestinationPath $GamePath -Force
+        } catch {
+            throw "Failed to extract BepInEx: $_"
+        }
+
+        Remove-Item $tempZip -Force -ErrorAction SilentlyContinue
     }
-
-    if (-not $release) {
-        throw "Could not find BepInEx $MajorVersion.x release"
-    }
-
-    $version = $release.tag_name -replace '^v', ''
-    Write-Host "  Found BepInEx v$version" -ForegroundColor Cyan
-
-    # Find download asset
-    $assetPattern = "BepInEx_win_${Architecture}.*\.zip$"
-    $asset = $release.assets | Where-Object { $_.name -match $assetPattern } | Select-Object -First 1
-
-    if (-not $asset) {
-        throw "Could not find BepInEx $Architecture asset in release"
-    }
-
-    # Download
-    $tempZip = Join-Path $env:TEMP "BepInEx_install.zip"
-    Write-Host "  Downloading: $($asset.name)..." -ForegroundColor Gray
-
-    try {
-        Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $tempZip -UseBasicParsing
-    } catch {
-        throw "Failed to download BepInEx: $_"
-    }
-
-    # Extract
-    Write-Host "  Extracting to game directory..." -ForegroundColor Gray
-    try {
-        Expand-Archive -Path $tempZip -DestinationPath $GamePath -Force
-    } catch {
-        throw "Failed to extract BepInEx: $_"
-    }
-
-    Remove-Item $tempZip -Force -ErrorAction SilentlyContinue
 
     # Create plugins directory
     $pluginsPath = Get-BepInExPluginsPath -GamePath $GamePath

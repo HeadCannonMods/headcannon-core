@@ -183,7 +183,8 @@ function Invoke-DevDeployBepInEx {
         [string]$GivenPath,
         [switch]$EnsureLoader,
         [ValidateSet(5,6)][int]$MajorVersion = 5,
-        [ValidateSet('x64','x86')][string]$Architecture = 'x64'
+        [ValidateSet('x64','x86')][string]$Architecture = 'x64',
+        [string]$VendorZip
     )
 
     Assert-DevBuildArtifact -BuildOutputPath $BuildOutputPath -FileName $ModDllName
@@ -192,7 +193,13 @@ function Invoke-DevDeployBepInEx {
 
     if (-not (Test-BepInExInstalled -GamePath $gamePath)) {
         if ($EnsureLoader) {
-            Install-BepInEx -GamePath $gamePath -MajorVersion $MajorVersion -Architecture $Architecture | Out-Null
+            $installArgs = @{
+                GamePath     = $gamePath
+                MajorVersion = $MajorVersion
+                Architecture = $Architecture
+            }
+            if ($VendorZip) { $installArgs.VendorZip = $VendorZip }
+            Install-BepInEx @installArgs | Out-Null
         } else {
             throw "BepInEx not detected at $gamePath. Pass -EnsureLoader to auto-install, or install BepInEx by hand."
         }
