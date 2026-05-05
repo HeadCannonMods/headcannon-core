@@ -44,7 +44,8 @@
       "env_var": "CYBERPUNK_2077_PATH",
       "steam_app_id": 1091500,
       "steam_folder": "Cyberpunk 2077",
-      "executable_relpath": "bin\\x64\\Cyberpunk2077.exe"
+      "executable_relpath": "bin\\x64\\Cyberpunk2077.exe",
+      "gog_ids": ["1423049311", "1256837418"]
     },
     "easy-delivery-co": {
       "display_name": "Easy Delivery Co",
