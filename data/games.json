@@ -249,6 +249,12 @@
       "steam_folder": "Assassin's Creed Unity",
       "ubisoft_app_ids": [720],
       "executable_relpath": "ACU.exe"
+    },
+    "black-and-white": {
+      "display_name": "Black & White",
+      "env_var": "BLACK_AND_WHITE_PATH",
+      "steam_folder": "Lionhead Studios Ltd\\Black & White",
+      "executable_relpath": "runblack.exe"
     }
   }
 }
