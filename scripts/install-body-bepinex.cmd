@@ -168,11 +168,11 @@ call :install_bepinex
 if errorlevel 1 exit /b 1
 set "WE_INSTALLED=true"
 echo.
-if defined YES_FLAG (
-    echo BepInEx installed. It will initialize on first game launch.
-) else (
-    call :prompt_bepinex_init
-)
+:: Single-pass install: BepInEx bootstraps on first game launch and loads
+:: any plugins it finds in BepInEx\plugins\ at that point. The previous
+:: two-phase prompt was defensive against edge cases the /y path already
+:: trusted away.
+echo BepInEx installed. It will initialize on first game launch.
 
 :after_loader
 echo.
@@ -237,31 +237,6 @@ if defined MOD_CONTROLS (
     echo !MOD_CONTROLS!
 )
 echo.
-exit /b 0
-
-:: ============================================
-:: Interactive BepInEx init gate (manual-install flow only).
-:: Skipped entirely when /y (launcher/automation) is set.
-:: ============================================
-:prompt_bepinex_init
-color 0E
-echo ========================================
-echo   BepInEx installed - action required
-echo ========================================
-echo.
-echo BepInEx was just installed but needs to initialize first.
-echo.
-echo   1. Start %GAME_DISPLAY_NAME%
-echo   2. Wait until you reach the main menu
-echo   3. Close the game
-echo   4. Come back here and type "install" to continue
-echo.
-:bepinex_gate
-set "_CONFIRM="
-set /p "_CONFIRM=Type install to continue: "
-if /i not "!_CONFIRM!"=="install" goto :bepinex_gate
-echo.
-color
 exit /b 0
 
 :: ============================================

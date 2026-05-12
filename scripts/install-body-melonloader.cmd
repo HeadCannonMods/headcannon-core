@@ -108,6 +108,11 @@ if exist "%GAME_PATH%\%STATE_FILE%" (
 )
 
 :: -------- Ensure MelonLoader --------
+:: Single-pass install: extract MelonLoader and deploy the mod DLLs in one
+:: shot. MelonLoader bootstraps itself on first game launch and loads any
+:: mods it finds in Mods\ at that point - no separate "init then install"
+:: dance required. The previous two-phase prompt was defensive against
+:: edge cases that the /y path already trusted away.
 if not exist "%GAME_PATH%\%MELONLOADER_MARKER%" (
     echo MelonLoader not found. Installing...
     echo.
@@ -115,11 +120,7 @@ if not exist "%GAME_PATH%\%MELONLOADER_MARKER%" (
     if errorlevel 1 exit /b 1
     set "WE_INSTALLED=true"
     echo.
-    if defined YES_FLAG (
-        echo MelonLoader installed. It will initialize on first game launch.
-    ) else (
-        call :prompt_melonloader_init
-    )
+    echo MelonLoader installed. It will initialize on first game launch.
 ) else (
     echo Existing MelonLoader detected, skipping loader install, deploying plugin only.
 )
@@ -170,27 +171,6 @@ if defined MOD_CONTROLS (
     echo !MOD_CONTROLS!
 )
 echo.
-exit /b 0
-
-:prompt_melonloader_init
-color 0E
-echo ========================================
-echo   MelonLoader installed - action required
-echo ========================================
-echo.
-echo MelonLoader was just installed but needs to initialize first.
-echo.
-echo   1. Start %GAME_DISPLAY_NAME%
-echo   2. Wait until you reach the main menu
-echo   3. Close the game
-echo   4. Come back here and type "install" to continue
-echo.
-:melonloader_gate
-set "_CONFIRM="
-set /p "_CONFIRM=Type install to continue: "
-if /i not "!_CONFIRM!"=="install" goto :melonloader_gate
-echo.
-color
 exit /b 0
 
 :install_melonloader

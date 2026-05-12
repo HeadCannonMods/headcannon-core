@@ -138,6 +138,10 @@ if exist "%GAME_PATH%\%STATE_FILE%" (
 )
 
 :: -------- Ensure BepInEx --------
+:: Single-pass install: extract BepInEx and deploy the mod DLLs in one
+:: shot. BepInEx bootstraps itself on first game launch and loads any
+:: plugins it finds in BepInEx\plugins\ at that point - no separate
+:: "init then install" dance required.
 if not exist "%GAME_PATH%\BepInEx\core\BepInEx.dll" (
     echo BepInEx not found. Installing...
     echo.
@@ -145,11 +149,7 @@ if not exist "%GAME_PATH%\BepInEx\core\BepInEx.dll" (
     if errorlevel 1 exit /b 1
     set "WE_INSTALLED=true"
     echo.
-    if defined YES_FLAG (
-        echo BepInEx installed. It will initialize on first game launch.
-    ) else (
-        call :prompt_bepinex_init
-    )
+    echo BepInEx installed. It will initialize on first game launch.
 ) else (
     echo Existing BepInEx detected, skipping loader install, deploying plugin only.
 )
@@ -202,30 +202,6 @@ if defined MOD_CONTROLS (
 echo.
 exit /b 0
 
-:: ============================================
-:: Interactive BepInEx init gate (manual-install flow only).
-:: Skipped entirely when /y (launcher/automation) is set.
-:: ============================================
-:prompt_bepinex_init
-color 0E
-echo ========================================
-echo   BepInEx installed - action required
-echo ========================================
-echo.
-echo BepInEx was just installed but needs to initialize first.
-echo.
-echo   1. Start %GAME_DISPLAY_NAME%
-echo   2. Wait until you reach the main menu
-echo   3. Close the game
-echo   4. Come back here and type "install" to continue
-echo.
-:bepinex_gate
-set "_CONFIRM="
-set /p "_CONFIRM=Type install to continue: "
-if /i not "!_CONFIRM!"=="install" goto :bepinex_gate
-echo.
-color
-exit /b 0
 
 :: ============================================
 :: Install BepInEx from the bundled vendored copy.
