@@ -27,6 +27,11 @@
 ::   BEPINEX_ARCH             "x64" or "x86" (vendor zip selector)
 ::   BEPINEX_VENDOR_ZIP_NAME  optional override (Thunderstore packs)
 ::   BEPINEX_SUBFOLDER        optional Thunderstore wrapper dir
+::   PLUGIN_SUBFOLDER         optional subfolder under BepInEx\plugins\
+::                            to deploy DLLs into (e.g. Valheim).
+::                            When set, also removes any flat-laid
+::                            copies of MOD_DLLS in plugins\ to prevent
+::                            duplicate-load conflicts.
 ::   MOD_CONTROLS             optional post-install help text
 ::
 :: Launcher CLI (passed through %*): [GAME_PATH] [/y]
@@ -177,13 +182,28 @@ echo Deploying mod files...
 
 set "PLUGINS_PATH=%GAME_PATH%\BepInEx\plugins"
 set "DLL_DIR=%SCRIPT_DIR%plugins"
+if defined PLUGIN_SUBFOLDER (
+    set "DEPLOY_PATH=%PLUGINS_PATH%\%PLUGIN_SUBFOLDER%"
+) else (
+    set "DEPLOY_PATH=%PLUGINS_PATH%"
+)
 
 if not exist "%PLUGINS_PATH%" mkdir "%PLUGINS_PATH%"
+if not exist "!DEPLOY_PATH!" mkdir "!DEPLOY_PATH!"
+
+if defined PLUGIN_SUBFOLDER (
+    for %%f in (%MOD_DLLS%) do (
+        if exist "%PLUGINS_PATH%\%%f" (
+            del /q "%PLUGINS_PATH%\%%f" >nul 2>&1
+            echo   Removed flat-laid %%f from plugins\ ^(superseded by %PLUGIN_SUBFOLDER%\^)
+        )
+    )
+)
 
 set "DEPLOY_FAILED=0"
 for %%f in (%MOD_DLLS%) do (
     if exist "%DLL_DIR%\%%f" (
-        copy /y "%DLL_DIR%\%%f" "%PLUGINS_PATH%\" >nul
+        copy /y "%DLL_DIR%\%%f" "!DEPLOY_PATH!\" >nul
         echo   Deployed %%f
     ) else (
         echo   ERROR: %%f not found in plugins folder

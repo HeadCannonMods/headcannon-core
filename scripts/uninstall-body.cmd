@@ -196,7 +196,11 @@ exit /b 0
 :: ============================================
 :compute_deploy_dir
 if /i "%FRAMEWORK_TYPE%"=="BepInEx" (
-    set "DEPLOY_DIR=%GAME_PATH%\BepInEx\plugins"
+    if defined PLUGIN_SUBFOLDER (
+        set "DEPLOY_DIR=%GAME_PATH%\BepInEx\plugins\%PLUGIN_SUBFOLDER%"
+    ) else (
+        set "DEPLOY_DIR=%GAME_PATH%\BepInEx\plugins"
+    )
     exit /b 0
 )
 if /i "%FRAMEWORK_TYPE%"=="MelonLoader" (
@@ -245,6 +249,25 @@ if defined LEGACY_DLLS (
             set /a REMOVED+=1
         )
     )
+)
+if /i "%FRAMEWORK_TYPE%"=="BepInEx" if defined PLUGIN_SUBFOLDER (
+    for %%f in (%MOD_DLLS%) do (
+        if exist "%GAME_PATH%\BepInEx\plugins\%%f" (
+            del "%GAME_PATH%\BepInEx\plugins\%%f"
+            echo   Removed: %%f ^(flat-laid duplicate^)
+            set /a REMOVED+=1
+        )
+    )
+    if defined LEGACY_DLLS (
+        for %%f in (%LEGACY_DLLS%) do (
+            if exist "%GAME_PATH%\BepInEx\plugins\%%f" (
+                del "%GAME_PATH%\BepInEx\plugins\%%f"
+                echo   Removed: %%f ^(legacy, flat-laid^)
+                set /a REMOVED+=1
+            )
+        )
+    )
+    rmdir "!DEPLOY_DIR!" >nul 2>&1
 )
 if "!REMOVED!"=="0" echo   No mod files found
 exit /b 0
