@@ -21,8 +21,9 @@ function Test-BepInExInstalled {
         [string]$GamePath
     )
 
-    $bepinexCore = Join-Path $GamePath "BepInEx/core/BepInEx.dll"
-    return (Test-Path $bepinexCore)
+    $v5Marker = Join-Path $GamePath "BepInEx/core/BepInEx.dll"
+    $v6Marker = Join-Path $GamePath "BepInEx/core/BepInEx.Core.dll"
+    return ((Test-Path $v5Marker) -or (Test-Path $v6Marker))
 }
 
 <#
@@ -194,11 +195,12 @@ function Install-BepInEx {
         } catch {
             throw "Failed to extract vendored BepInEx from $VendorZip : $_"
         }
-        $coreDll = Join-Path $GamePath 'BepInEx/core/BepInEx.dll'
+        $coreDllName = if ($MajorVersion -eq 6) { 'BepInEx.Core.dll' } else { 'BepInEx.dll' }
+        $coreDll = Join-Path $GamePath "BepInEx/core/$coreDllName"
         if (Test-Path $coreDll) {
             $version = (Get-Item $coreDll).VersionInfo.FileVersion
         } else {
-            throw "BepInEx.dll missing after extracting $VendorZip - vendored zip is corrupt."
+            throw "$coreDllName missing after extracting $VendorZip - vendored zip is corrupt."
         }
         Write-Host "  Installed BepInEx v$version" -ForegroundColor Cyan
     } else {

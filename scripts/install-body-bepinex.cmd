@@ -133,20 +133,25 @@ if exist "%GAME_PATH%\%STATE_FILE%" (
 )
 
 :: -------- Ensure BepInEx --------
-:: Loader-presence check is BepInEx/core/BepInEx.dll. If it's there, also
-:: arch-check the loader proxy (winhttp.dll) against BEPINEX_ARCH before
-:: trusting it - other mod managers (TMM/r2modman) drop the generic x64
-:: BepInExPack into x86 Unity 2017 games, which silently prevents the
-:: loader from injecting (32-bit process can't load 64-bit DLL). Without
-:: this gate we deploy plugins onto a dead loader and the game launches
-:: vanilla.
+:: Loader-presence check: BepInEx 5 ships BepInEx/core/BepInEx.dll;
+:: BepInEx 6 (IL2CPP) renamed the core assembly to BepInEx.Core.dll, so
+:: check both. If a loader is there, also arch-check the loader proxy
+:: (winhttp.dll) against BEPINEX_ARCH before trusting it - other mod
+:: managers (TMM/r2modman) drop the generic x64 BepInExPack into x86
+:: Unity 2017 games, which silently prevents the loader from injecting
+:: (32-bit process can't load 64-bit DLL). Without this gate we deploy
+:: plugins onto a dead loader and the game launches vanilla.
+set "_LOADER_PRESENT="
+if exist "%GAME_PATH%\BepInEx\core\BepInEx.dll"      set "_LOADER_PRESENT=1"
+if exist "%GAME_PATH%\BepInEx\core\BepInEx.Core.dll" set "_LOADER_PRESENT=1"
+
 set "_LOADER_BAD="
-if exist "%GAME_PATH%\BepInEx\core\BepInEx.dll" (
+if defined _LOADER_PRESENT (
     call :verify_loader_arch
     if errorlevel 1 set "_LOADER_BAD=1"
 )
 
-if not exist "%GAME_PATH%\BepInEx\core\BepInEx.dll" goto :install_loader
+if not defined _LOADER_PRESENT goto :install_loader
 if defined _LOADER_BAD goto :replace_loader
 echo Existing BepInEx detected, skipping loader install, deploying plugin only.
 goto :after_loader

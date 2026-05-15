@@ -142,7 +142,12 @@ if exist "%GAME_PATH%\%STATE_FILE%" (
 :: shot. BepInEx bootstraps itself on first game launch and loads any
 :: plugins it finds in BepInEx\plugins\ at that point - no separate
 :: "init then install" dance required.
-if not exist "%GAME_PATH%\BepInEx\core\BepInEx.dll" (
+:: BepInEx 5 ships core/BepInEx.dll; BepInEx 6 (IL2CPP) renamed to
+:: BepInEx.Core.dll. Check both so v6 IL2CPP installs are detected.
+set "_LOADER_PRESENT="
+if exist "%GAME_PATH%\BepInEx\core\BepInEx.dll"      set "_LOADER_PRESENT=1"
+if exist "%GAME_PATH%\BepInEx\core\BepInEx.Core.dll" set "_LOADER_PRESENT=1"
+if not defined _LOADER_PRESENT (
     echo BepInEx not found. Installing...
     echo.
     call :install_bepinex
