@@ -36,6 +36,16 @@ function Update-CameraUnlockCoreToRemoteTip {
         return
     }
 
+    if ($env:GITHUB_ACTIONS -eq 'true' -or $env:CI -eq 'true') {
+        # actions/checkout clones submodules shallow (--depth=1). A subsequent
+        # --remote --merge then fetches origin/main also shallow, and git sees
+        # two grafted roots with no common ancestor: "refusing to merge
+        # unrelated histories". CI must consume the committed submodule pointer
+        # as-is; bumping it is a deliberate dev action with a commit attached.
+        Write-Host "CI detected - skipping cameraunlock-core remote refresh (consuming committed pointer)." -ForegroundColor Gray
+        return
+    }
+
     Write-Host "Refreshing cameraunlock-core submodule from origin/main..." -ForegroundColor Cyan
     & git -C $modRoot submodule update --remote --merge -- cameraunlock-core 2>&1 | ForEach-Object {
         Write-Host "  $_" -ForegroundColor Gray
