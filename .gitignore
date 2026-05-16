@@ -40,7 +40,10 @@ packages/
 
 # AI tooling
 .claude/
+.lab/
 .millhouse/
+AGENTS.md
+CLAUDE.md
 
 # OS
 .DS_Store
