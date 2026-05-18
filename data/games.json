@@ -2,6 +2,13 @@
   "$comment": "Canonical per-game detection data for CameraUnlock head-tracking mods. This is the single source of truth for where each supported game lives on disk: env var name, Steam folder, GOG IDs, Epic/Xbox paths, executable relative path, Unity data folder (for Cecil patching). Consumed by cameraunlock-core/powershell/GamePathDetection.psm1 today, and destined to be consumed by install.cmd scripts and the launcher's Rust detect module (see roadmap in the mod-manager repo). Mod-specific fields (which DLLs to deploy, mod version, framework type) do NOT belong here - those live in each mod's install.cmd CONFIG BLOCK and the launcher's catalog/mods.json. Adding a new game: pick a hyphen-lowercase id, fill in at minimum `display_name`, `env_var`, and `executable_relpath`. Any field that's empty for a given game should be omitted rather than set to a null/empty value.",
   "schema_version": 1,
   "games": {
+    "abzu": {
+      "display_name": "ABZU",
+      "env_var": "ABZU_PATH",
+      "steam_app_id": 384190,
+      "steam_folder": "ABZU",
+      "executable_relpath": "AbzuGame\\Binaries\\Win64\\AbzuGame-Win64-Shipping.exe"
+    },
     "obra-dinn": {
       "display_name": "Return of the Obra Dinn",
       "env_var": "OBRA_DINN_PATH",
@@ -46,6 +53,13 @@
       "steam_folder": "Cyberpunk 2077",
       "executable_relpath": "bin\\x64\\Cyberpunk2077.exe",
       "gog_ids": ["1423049311", "1256837418"]
+    },
+    "control-ultimate-edition": {
+      "display_name": "Control: Ultimate Edition",
+      "env_var": "CONTROL_PATH",
+      "steam_app_id": 870780,
+      "steam_folder": "Control",
+      "executable_relpath": "Control_DX12.exe"
     },
     "easy-delivery-co": {
       "display_name": "Easy Delivery Co",
@@ -136,6 +150,13 @@
       "executable_relpath": "Painscreek.exe",
       "data_folder": "Painscreek_Data"
     },
+    "fallout-4": {
+      "display_name": "Fallout 4",
+      "env_var": "FALLOUT_4_PATH",
+      "steam_app_id": 377160,
+      "steam_folder": "Fallout 4",
+      "executable_relpath": "Fallout4.exe"
+    },
     "fallout-new-vegas": {
       "display_name": "Fallout: New Vegas",
       "env_var": "FalloutNVPath",
@@ -166,6 +187,13 @@
       "steam_folder": "Dying Light 2",
       "executable_relpath": "ph\\work\\bin\\x64\\DyingLightGame_x64_rwdi.exe"
     },
+    "dishonored-2": {
+      "display_name": "Dishonored 2",
+      "env_var": "DISHONORED_2_PATH",
+      "steam_app_id": 403640,
+      "steam_folder": "Dishonored2",
+      "executable_relpath": "Dishonored2.exe"
+    },
     "bioshock-remastered": {
       "display_name": "BioShock Remastered",
       "env_var": "BIOSHOCK_PATH",
@@ -191,6 +219,14 @@
       "env_var": "SHADOWS_OF_DOUBT_PATH",
       "steam_folder": "Shadows of Doubt",
       "executable_relpath": "Shadows of Doubt.exe"
+    },
+    "sons-of-the-forest": {
+      "display_name": "Sons of the Forest",
+      "env_var": "SONS_OF_THE_FOREST_PATH",
+      "steam_app_id": 1326470,
+      "steam_folder": "Sons Of The Forest",
+      "executable_relpath": "SonsOfTheForest.exe",
+      "data_folder": "SonsOfTheForest_Data"
     },
     "valheim": {
       "display_name": "Valheim",
@@ -235,12 +271,19 @@
       "executable_relpath": "TheGreenLight.exe",
       "data_folder": "TheGreenLight_Data"
     },
-    "sons-of-the-forest": {
-      "display_name": "Sons of the Forest",
-      "env_var": "SONS_OF_THE_FOREST_PATH",
-      "steam_folder": "Sons Of The Forest",
-      "executable_relpath": "SonsOfTheForest.exe",
-      "data_folder": "SonsOfTheForest_Data"
+    "the-pathless": {
+      "display_name": "The Pathless",
+      "env_var": "THE_PATHLESS_PATH",
+      "steam_app_id": 1437350,
+      "steam_folder": "The Pathless",
+      "executable_relpath": "Pathless.exe"
+    },
+    "the-witness": {
+      "display_name": "The Witness",
+      "env_var": "THE_WITNESS_PATH",
+      "steam_app_id": 210970,
+      "steam_folder": "The Witness",
+      "executable_relpath": "witness64_d3d11.exe"
     },
     "assassins-creed-unity": {
       "display_name": "Assassin's Creed Unity",
@@ -250,11 +293,32 @@
       "ubisoft_app_ids": [720],
       "executable_relpath": "ACU.exe"
     },
+    "portal-2": {
+      "display_name": "Portal 2",
+      "env_var": "PORTAL_2_PATH",
+      "steam_app_id": 620,
+      "steam_folder": "Portal 2",
+      "executable_relpath": "portal2.exe"
+    },
     "black-and-white": {
       "display_name": "Black & White",
       "env_var": "BLACK_AND_WHITE_PATH",
       "steam_folder": "Lionhead Studios Ltd\\Black & White",
       "executable_relpath": "runblack.exe"
+    },
+    "metro-2033-redux": {
+      "display_name": "Metro 2033 Redux",
+      "env_var": "METRO_2033_REDUX_PATH",
+      "steam_app_id": 286690,
+      "steam_folder": "Metro 2033 Redux",
+      "executable_relpath": "metro.exe"
+    },
+    "still-wakes-the-deep": {
+      "display_name": "Still Wakes the Deep",
+      "env_var": "STILL_WAKES_THE_DEEP_PATH",
+      "steam_app_id": 1622910,
+      "steam_folder": "Still Wakes the Deep",
+      "executable_relpath": "Habitat\\Binaries\\Win64\\StillWakesTheDeep.exe"
     }
   }
 }

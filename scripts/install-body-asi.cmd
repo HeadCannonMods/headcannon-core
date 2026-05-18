@@ -133,8 +133,8 @@ set "FILES_DIR=%SCRIPT_DIR%plugins"
 
 set "DEPLOY_FAILED=0"
 for %%f in (%MOD_DLLS%) do (
-    if exist "%FILES_DIR%\%%f" (
-        copy /y "%FILES_DIR%\%%f" "%EXE_DIR%\" >nul
+    if exist "!FILES_DIR!\%%f" (
+        copy /y "!FILES_DIR!\%%f" "!EXE_DIR!\" >nul
         echo   Deployed %%f
     ) else (
         echo   ERROR: %%f not found in plugins folder
@@ -174,16 +174,16 @@ exit /b 0
 set "VENDOR_DIR=%SCRIPT_DIR%vendor\ultimate-asi-loader"
 set "VENDOR_DLL=%VENDOR_DIR%\dinput8.dll"
 
-if not exist "%VENDOR_DLL%" (
+if not exist "!VENDOR_DLL!" (
     echo   ERROR: Bundled Ultimate ASI Loader not found at:
-    echo     %VENDOR_DLL%
+    echo     !VENDOR_DLL!
     echo   The installer ZIP is corrupt. Re-download the release.
     exit /b 1
 )
 
-copy /y "%VENDOR_DLL%" "%EXE_DIR%\%ASI_LOADER_NAME%" >nul
+copy /y "!VENDOR_DLL!" "!EXE_DIR!\%ASI_LOADER_NAME%" >nul
 if errorlevel 1 (
-    echo   ERROR: Failed to copy loader to %EXE_DIR%.
+    echo   ERROR: Failed to copy loader to !EXE_DIR!.
     echo   Check the game directory is writable.
     exit /b 1
 )
@@ -192,17 +192,17 @@ echo   Ultimate ASI Loader installed successfully!
 exit /b 0
 
 :write_state_file
-> "%GAME_PATH%\%STATE_FILE%" (
+> "!GAME_PATH!\%STATE_FILE%" (
     echo {
     echo   "schema_version": 1,
     echo   "framework": {
-    echo     "type": "%FRAMEWORK_TYPE%",
+    echo     "type": "!FRAMEWORK_TYPE!",
     echo     "installed_by_us": !WE_INSTALLED!
     echo   },
     echo   "mod": {
-    echo     "id": "%GAME_ID%",
-    echo     "name": "%MOD_INTERNAL_NAME%",
-    echo     "version": "%MOD_VERSION%"
+    echo     "id": "!GAME_ID!",
+    echo     "name": "!MOD_INTERNAL_NAME!",
+    echo     "version": "!MOD_VERSION!"
     echo   }
     echo }
 )
