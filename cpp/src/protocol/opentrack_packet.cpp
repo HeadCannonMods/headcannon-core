@@ -4,6 +4,19 @@
 
 namespace cameraunlock {
 
+namespace {
+// A finite double can exceed the float range (e.g. 1e300), in which case the
+// narrowing cast produces +/-inf - which then poisons every downstream
+// sin/cos and view-matrix computation with NaN. Checking isnan/isinf on the
+// source double is not enough; the float result must also be finite. Packets
+// arrive from any host on the network (the socket binds INADDR_ANY), so this
+// is an untrusted-input boundary.
+inline bool FiniteFloat(double v, float& out) {
+    out = static_cast<float>(v);
+    return std::isfinite(out);
+}
+}  // namespace
+
 bool OpenTrackPacket::TryParse(const void* data, size_t length, TrackingPose& pose) {
     if (data == nullptr || length < kMinPacketSize) {
         return false;
@@ -16,14 +29,12 @@ bool OpenTrackPacket::TryParse(const void* data, size_t length, TrackingPose& po
     std::memcpy(&pitch, bytes + kPitchOffset, sizeof(double));
     std::memcpy(&roll, bytes + kRollOffset, sizeof(double));
 
-    // Validate values are not NaN or Infinity
-    if (std::isnan(yaw) || std::isinf(yaw) ||
-        std::isnan(pitch) || std::isinf(pitch) ||
-        std::isnan(roll) || std::isinf(roll)) {
+    float fyaw, fpitch, froll;
+    if (!FiniteFloat(yaw, fyaw) || !FiniteFloat(pitch, fpitch) || !FiniteFloat(roll, froll)) {
         return false;
     }
 
-    pose = TrackingPose(static_cast<float>(yaw), static_cast<float>(pitch), static_cast<float>(roll));
+    pose = TrackingPose(fyaw, fpitch, froll);
     return true;
 }
 
@@ -39,18 +50,13 @@ bool OpenTrackPacket::TryParsePosition(const void* data, size_t length, Position
     std::memcpy(&py, bytes + kPosYOffset, sizeof(double));
     std::memcpy(&pz, bytes + kPosZOffset, sizeof(double));
 
-    if (std::isnan(px) || std::isinf(px) ||
-        std::isnan(py) || std::isinf(py) ||
-        std::isnan(pz) || std::isinf(pz)) {
+    // OpenTrack position is in centimeters, convert to meters.
+    float fx, fy, fz;
+    if (!FiniteFloat(px * 0.01, fx) || !FiniteFloat(py * 0.01, fy) || !FiniteFloat(pz * 0.01, fz)) {
         return false;
     }
 
-    // OpenTrack position is in centimeters, convert to meters
-    position = PositionData(
-        static_cast<float>(px * 0.01),
-        static_cast<float>(py * 0.01),
-        static_cast<float>(pz * 0.01)
-    );
+    position = PositionData(fx, fy, fz);
     return true;
 }
 
@@ -69,21 +75,14 @@ bool OpenTrackPacket::TryParseAll(const void* data, size_t length, TrackingPose&
     std::memcpy(&pitch, bytes + kPitchOffset, sizeof(double));
     std::memcpy(&roll, bytes + kRollOffset, sizeof(double));
 
-    if (std::isnan(px) || std::isinf(px) ||
-        std::isnan(py) || std::isinf(py) ||
-        std::isnan(pz) || std::isinf(pz) ||
-        std::isnan(yaw) || std::isinf(yaw) ||
-        std::isnan(pitch) || std::isinf(pitch) ||
-        std::isnan(roll) || std::isinf(roll)) {
+    float fyaw, fpitch, froll, fx, fy, fz;
+    if (!FiniteFloat(yaw, fyaw) || !FiniteFloat(pitch, fpitch) || !FiniteFloat(roll, froll) ||
+        !FiniteFloat(px * 0.01, fx) || !FiniteFloat(py * 0.01, fy) || !FiniteFloat(pz * 0.01, fz)) {
         return false;
     }
 
-    pose = TrackingPose(static_cast<float>(yaw), static_cast<float>(pitch), static_cast<float>(roll));
-    position = PositionData(
-        static_cast<float>(px * 0.01),
-        static_cast<float>(py * 0.01),
-        static_cast<float>(pz * 0.01)
-    );
+    pose = TrackingPose(fyaw, fpitch, froll);
+    position = PositionData(fx, fy, fz);
     return true;
 }
 
